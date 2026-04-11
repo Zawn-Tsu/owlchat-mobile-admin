@@ -67,18 +67,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const login = async (username: string, password: string) => {
-    console.log('Login attempt:', username);
-    try {
-      const response = await AuthService.login({ username, password });
-      console.log('Login success:', response);
-      await storage.setItem('accessToken', response.accessToken);
-      await storage.setItem('refreshToken', response.refreshToken);
-      setIsAuthenticated(true);
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
+  try {
+    const response = await AuthService.login({ username, password });
+
+    if (response.role !== 'ADMIN') {
+      throw new Error('NOT_ADMIN');
     }
-  };
+
+    await storage.setItem('accessToken', response.accessToken);
+    await storage.setItem('refreshToken', response.refreshToken);
+
+    setIsAuthenticated(true);
+
+  } catch (error: any) {
+  console.log('FULL ERROR:', error);
+
+  // 👉 lấy message từ backend
+  const message =
+    error?.response?.data?.message ||
+    error?.response?.data?.localizedMessage ||
+    error?.message ||
+    'Đăng nhập thất bại';
+
+  throw new Error(message);
+}
+};
 
   const logout = async () => {
     const refreshToken = await storage.getItem('refreshToken');

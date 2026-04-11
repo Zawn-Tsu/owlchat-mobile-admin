@@ -12,18 +12,23 @@ import {
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 
+
 const LoginScreen: React.FC = () => {
-  const [username, setUsername] = useState('admin_owl');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const { login } = useAuth();
 
-  const handleLogin = async () => {
-    try {
-      await login(username, password);
-    } catch (error) {
-      Alert.alert('Login Failed', 'Sai tài khoản hoặc mật khẩu');
-    }
-  };
+ const handleLogin = async () => {
+  
+  try {
+     setErrorMessage(''); 
+    await login(username, password);
+
+  } catch (error: any) {
+    setErrorMessage(error.message);
+  }
+};
 
   return (
     <KeyboardAvoidingView
@@ -49,6 +54,7 @@ const LoginScreen: React.FC = () => {
           {/* Username */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Tên đăng nhập</Text>
+            
             <TextInput
               style={styles.input}
               placeholder="Nhập username"
@@ -68,7 +74,9 @@ const LoginScreen: React.FC = () => {
               onChangeText={setPassword}
             />
           </View>
-
+            {errorMessage ? (
+              <Text style={styles.errorText}>{errorMessage}</Text>
+            ) : null}
           {/* Forgot */}
           <TouchableOpacity style={styles.forgotBtn}>
             <Text style={styles.forgotText}>Quên mật khẩu?</Text>
@@ -129,7 +137,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#1f2937',
   },
-
+  errorText: {
+    color: 'red',
+    fontSize: 13,
+    marginTop: 10,
+    textAlign: 'center',
+  },
   subtitle: {
     fontSize: 12,
     color: '#9ca3af',
