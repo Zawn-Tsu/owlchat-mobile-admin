@@ -12,6 +12,7 @@ import ChatManagementScreen from './screens/ChatManagementScreen';
 import SocialManagementScreen from './screens/SocialManagementScreen';
 import MessageManagementScreen from './screens/MessageManagementScreen';
 import ProfileScreen from './screens/Profilescreen';
+import ReportCenterScreen from './screens/ReportCenterScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -78,7 +79,11 @@ const MainTabs: React.FC = () => {
           tabBarIcon: ({ focused }) => <TabIcon icon="🌐" focused={focused} />,
         }}
       />
+      <Tab.Screen name="ReportCenter" component={ReportCenterScreen}
+      options={{ tabBarLabel: 'Báo cáo', tabBarIcon: ({ focused }) => <TabIcon icon="🚨" focused={focused} /> }}
+      />
       <Tab.Screen
+      
         name="Profile"
         component={ProfileScreen}
         options={{
