@@ -130,21 +130,12 @@ const DashboardScreen: React.FC = ({ navigation }: any) => {
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
   const statCards = [
-    { icon:'👥', label:'Người dùng', value:fmt(stats.totalUsers), sub:`${fmt(stats.activeUsers)} active`, bg:'#eff6ff', border:'#bfdbfe', screen:'UserManagement' },
-    { icon:'🔒', label:'Đã khoá',    value:fmt(stats.lockedUsers), bg:'#fef2f2', border:'#fecaca', screen:'UserManagement' },
-    { icon:'💬', label:'Phòng chat', value:fmt(stats.totalChats), sub:`${fmt(stats.activeChats)} active`, bg:'#f0fdf4', border:'#bbf7d0', screen:'ChatManagement' },
-    { icon:'📨', label:'Tin nhắn',   value:fmt(stats.totalMessages), sub:`${fmt(stats.removedMessages)} bị xoá`, bg:'#fdf4ff', border:'#e9d5ff', screen:'MessageManagement' },
-    { icon:'🤝', label:'Bạn bè',     value:fmt(stats.totalFriendships), bg:'#fef9c3', border:'#fde68a', screen:'SocialManagement' },
-    { icon:'🚫', label:'Block',      value:fmt(stats.totalBlocks), bg:'#fff7ed', border:'#fed7aa', screen:'SocialManagement' },
-  ];
-
-  const quickActions = [
-    { icon:'👤', label:'Tài khoản', screen:'UserManagement', bg:'#eff6ff' },
-    { icon:'💬', label:'Chat',      screen:'ChatManagement', bg:'#f0fdf4' },
-    { icon:'📨', label:'Tin nhắn', screen:'MessageManagement', bg:'#fdf4ff' },
-    { icon:'🌐', label:'Xã hội',   screen:'SocialManagement', bg:'#fff7ed' },
-    { icon:'🚨', label:'Báo cáo',  screen:'ReportCenter',    bg:'#fef2f2' },
-    { icon:'👤', label:'Hồ sơ',    screen:'Profile',         bg:'#f0fdf4' },
+    { icon:'👥', label:'Người dùng', value:fmt(stats.totalUsers), sub:`${fmt(stats.activeUsers)} active`, bg:'#eff6ff', border:'#bfdbfe' },
+    { icon:'🔒', label:'Đã khoá',    value:fmt(stats.lockedUsers), bg:'#fef2f2', border:'#fecaca' },
+    { icon:'💬', label:'Phòng chat', value:fmt(stats.totalChats), sub:`${fmt(stats.activeChats)} active`, bg:'#f0fdf4', border:'#bbf7d0' },
+    { icon:'📨', label:'Tin nhắn',   value:fmt(stats.totalMessages), sub:`${fmt(stats.removedMessages)} bị xoá`, bg:'#fdf4ff', border:'#e9d5ff' },
+    { icon:'🤝', label:'Bạn bè',     value:fmt(stats.totalFriendships), bg:'#fef9c3', border:'#fde68a' },
+    { icon:'🚫', label:'Block',      value:fmt(stats.totalBlocks), bg:'#fff7ed', border:'#fed7aa' },
   ];
 
   return (
@@ -176,27 +167,70 @@ const DashboardScreen: React.FC = ({ navigation }: any) => {
           <Text style={s.sectionTitle}>Tổng quan hệ thống</Text>
           <View style={s.statsGrid}>
             {statCards.map((c, i) => (
-              <TouchableOpacity key={i}
-                style={[s.statCard, { backgroundColor:c.bg, borderColor:c.border }]}
-                onPress={() => navigation?.navigate(c.screen)} activeOpacity={0.7}>
+              <View key={i}
+                style={[s.statCard, { backgroundColor:c.bg, borderColor:c.border }]}>
                 <Text style={{ fontSize:22, marginBottom:6 }}>{c.icon}</Text>
                 <Text style={s.statVal}>{c.value}</Text>
                 <Text style={s.statLbl}>{c.label}</Text>
                 {c.sub && <Text style={s.statSub}>{c.sub}</Text>}
-              </TouchableOpacity>
+              </View>
             ))}
           </View>
 
-          {/* Alert strip */}
-          {stats.pendingRequests > 0 && (
-            <TouchableOpacity style={s.alert} onPress={() => navigation?.navigate('SocialManagement')}>
-              <Text style={{ fontSize:18 }}>⏳</Text>
-              <Text style={s.alertTxt}>
-                <Text style={{ fontWeight:'700' }}>{stats.pendingRequests}</Text> lời mời kết bạn đang chờ duyệt
-              </Text>
-              <Text style={{ fontSize:16, color:'#854d0e' }}>→</Text>
-            </TouchableOpacity>
-          )}
+          {/* Status alert */}
+          <View style={s.statusSection}>
+            {stats.pendingRequests > 0 && (
+              <View style={s.statusCard}>
+                <View style={s.statusLeft}>
+                  <Text style={{ fontSize:20 }}>⏳</Text>
+                  <View style={{ marginLeft:10 }}>
+                    <Text style={{ fontWeight:'bold', color:'#854d0e', fontSize:13 }}>Lời mời kết bạn chờ duyệt</Text>
+                    <Text style={{ color:'#92400e', fontSize:12, marginTop:2 }}>{stats.pendingRequests} yêu cầu</Text>
+                  </View>
+                </View>
+                <View style={{ width:6, height:6, borderRadius:3, backgroundColor:'#d97706' }} />
+              </View>
+            )}
+            
+            {stats.lockedUsers > 0 && (
+              <View style={s.statusCard}>
+                <View style={s.statusLeft}>
+                  <Text style={{ fontSize:20 }}>🔒</Text>
+                  <View style={{ marginLeft:10 }}>
+                    <Text style={{ fontWeight:'bold', color:'#9f1239', fontSize:13 }}>Tài khoản bị khoá</Text>
+                    <Text style={{ color:'#be185d', fontSize:12, marginTop:2 }}>{stats.lockedUsers} tài khoản</Text>
+                  </View>
+                </View>
+                <View style={{ width:6, height:6, borderRadius:3, backgroundColor:'#be185d' }} />
+              </View>
+            )}
+
+            {stats.removedMessages > 0 && (
+              <View style={s.statusCard}>
+                <View style={s.statusLeft}>
+                  <Text style={{ fontSize:20 }}>🗑️</Text>
+                  <View style={{ marginLeft:10 }}>
+                    <Text style={{ fontWeight:'bold', color:'#7c2d12', fontSize:13 }}>Tin nhắn bị xoá</Text>
+                    <Text style={{ color:'#9a3412', fontSize:12, marginTop:2 }}>{stats.removedMessages} tin nhắn</Text>
+                  </View>
+                </View>
+                <View style={{ width:6, height:6, borderRadius:3, backgroundColor:'#9a3412' }} />
+              </View>
+            )}
+
+            {stats.totalBlocks > 0 && (
+              <View style={s.statusCard}>
+                <View style={s.statusLeft}>
+                  <Text style={{ fontSize:20 }}>🚫</Text>
+                  <View style={{ marginLeft:10 }}>
+                    <Text style={{ fontWeight:'bold', color:'#b45309', fontSize:13 }}>Mối quan hệ bị chặn</Text>
+                    <Text style={{ color:'#d97706', fontSize:12, marginTop:2 }}>{stats.totalBlocks} block</Text>
+                  </View>
+                </View>
+                <View style={{ width:6, height:6, borderRadius:3, backgroundColor:'#d97706' }} />
+              </View>
+            )}
+          </View>
 
           {/* Charts */}
           <Text style={s.sectionTitle}>Biểu đồ thống kê</Text>
@@ -223,17 +257,44 @@ const DashboardScreen: React.FC = ({ navigation }: any) => {
               ]} />
           </View>
 
-          {/* Quick actions */}
-          <Text style={s.sectionTitle}>Truy cập nhanh</Text>
-          <View style={s.actGrid}>
-            {quickActions.map((a, i) => (
-              <TouchableOpacity key={i}
-                style={[s.actCard, { backgroundColor:a.bg }]}
-                onPress={() => navigation?.navigate(a.screen)} activeOpacity={0.7}>
-                <Text style={{ fontSize:24, marginBottom:5 }}>{a.icon}</Text>
-                <Text style={s.actLbl}>{a.label}</Text>
-              </TouchableOpacity>
-            ))}
+          {/* Analytics Summary */}
+          <Text style={s.sectionTitle}>Phân tích chi tiết</Text>
+          <View style={s.analyticsSection}>
+            <View style={s.analyticsCard}>
+              <View style={s.analyticsHeader}>
+                <Text style={{ fontSize:18 }}>📊</Text>
+                <Text style={{ fontWeight:'600', color:'#111827', marginLeft:10 }}>Tỷ lệ hoạt động</Text>
+              </View>
+              <View style={s.analyticsStat}>
+                <Text style={{ color:'#6b7280', fontSize:12 }}>Người dùng kích hoạt:</Text>
+                <Text style={{ fontWeight:'bold', color:'#16a34a', fontSize:16, marginTop:4 }}>
+                  {stats.totalUsers > 0 ? ((stats.activeUsers / stats.totalUsers * 100).toFixed(1) + '%') : '—'}
+                </Text>
+              </View>
+              <View style={s.analyticsStat}>
+                <Text style={{ color:'#6b7280', fontSize:12 }}>Phòng chat hoạt động:</Text>
+                <Text style={{ fontWeight:'bold', color:'#2563eb', fontSize:16, marginTop:4 }}>
+                  {stats.totalChats > 0 ? ((stats.activeChats / stats.totalChats * 100).toFixed(1) + '%') : '—'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={s.analyticsCard}>
+              <View style={s.analyticsHeader}>
+                <Text style={{ fontSize:18 }}>👥</Text>
+                <Text style={{ fontWeight:'600', color:'#111827', marginLeft:10 }}>Mối quan hệ xã hội</Text>
+              </View>
+              <View style={s.analyticsStat}>
+                <Text style={{ color:'#6b7280', fontSize:12 }}>Tổng kết bạn:</Text>
+                <Text style={{ fontWeight:'bold', color:'#8b5cf6', fontSize:16, marginTop:4 }}>{fmt(stats.totalFriendships)}</Text>
+              </View>
+              <View style={s.analyticsStat}>
+                <Text style={{ color:'#6b7280', fontSize:12 }}>Chặn / Tổng:</Text>
+                <Text style={{ fontWeight:'bold', color:'#ef4444', fontSize:16, marginTop:4 }}>
+                  {stats.totalFriendships > 0 ? ((stats.totalBlocks / stats.totalFriendships * 100).toFixed(2) + '%') : '—'}
+                </Text>
+              </View>
+            </View>
           </View>
 
           {/* Activity feed */}
@@ -290,10 +351,15 @@ const s = StyleSheet.create({
   statVal: { fontSize:26, fontWeight:'bold', color:'#111827', marginBottom:2 },
   statLbl: { fontSize:12, color:'#6b7280', fontWeight:'500' },
   statSub: { fontSize:10, color:'#9ca3af', marginTop:2 },
-  alert: { flexDirection:'row', alignItems:'center', gap:10, backgroundColor:'#fef9c3', marginHorizontal:16, marginTop:12, borderRadius:12, padding:12, borderWidth:1, borderColor:'#fde68a' },
-  alertTxt: { flex:1, fontSize:13, color:'#854d0e' },
+  statusSection: { paddingHorizontal:16, marginTop:8, marginBottom:4, gap:8 },
+  statusCard: { flexDirection:'row', alignItems:'center', justifyContent:'space-between', backgroundColor:'#fff', borderRadius:12, padding:14, borderLeftWidth:4, borderLeftColor:'#d97706', shadowColor:'#000', shadowOpacity:0.03, shadowRadius:3, elevation:1 },
+  statusLeft: { flexDirection:'row', alignItems:'center', flex:1 },
   chartCard: { backgroundColor:'#fff', marginHorizontal:16, borderRadius:16, padding:16, gap:16, shadowColor:'#000', shadowOpacity:0.05, shadowRadius:6, elevation:3 },
   chartDiv: { height:1, backgroundColor:'#f3f4f6' },
+  analyticsSection: { paddingHorizontal:16, marginVertical:4, gap:10 },
+  analyticsCard: { backgroundColor:'#fff', borderRadius:12, padding:14, shadowColor:'#000', shadowOpacity:0.03, shadowRadius:3, elevation:1 },
+  analyticsHeader: { flexDirection:'row', alignItems:'center', marginBottom:12, paddingBottom:12, borderBottomWidth:1, borderBottomColor:'#f3f4f6' },
+  analyticsStat: { marginBottom:10 },
   actGrid: { flexDirection:'row', flexWrap:'wrap', paddingHorizontal:12, gap:10 },
   actCard: { borderRadius:14, padding:16, width:'30.5%', alignItems:'center', justifyContent:'center', shadowColor:'#000', shadowOpacity:0.03, shadowRadius:3, elevation:1 },
   actLbl: { fontSize:11, color:'#374151', fontWeight:'600', textAlign:'center' },

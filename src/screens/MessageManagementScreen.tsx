@@ -150,7 +150,7 @@ const MessageManagementScreen: React.FC = () => {
   const [search, setSearch] = useState('');
   const [searchDebounce, setSearchDebounce] = useState('');
   const [typeFilter, setTypeFilter] = useState('');    // '' | 'TEXT' | 'IMAGE' etc.
-  const [statusFilter, setStatusFilter] = useState(''); // '' | 'true' | 'false'
+  const [statusFilter, setStatusFilter] = useState<boolean | null>(null); // null = all, false = removed only, true = active only
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const PAGE_SIZE = 30;
@@ -170,11 +170,13 @@ const MessageManagementScreen: React.FC = () => {
     else setLoadingMore(true);
     try {
       const params: Record<string, any> = {
-        page: pageNum, size: PAGE_SIZE, ascSort: false,
+        page: pageNum, 
+        size: PAGE_SIZE, 
+        ascSort: false,
       };
       if (searchDebounce) params.keywords = searchDebounce;
       if (typeFilter) params.type = typeFilter;
-      if (statusFilter !== '') params.status = statusFilter;
+      if (statusFilter !== null) params.status = statusFilter; // null = skip, false = removed, true = active
 
       const res = await MessageAPI.getMessages(params);
       const data: Message[] = Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
@@ -348,10 +350,18 @@ const MessageManagementScreen: React.FC = () => {
         ))}
         <View style={styles.filterDivider} />
         <TouchableOpacity
-          style={[styles.filterPill, statusFilter === 'false' && styles.filterPillDanger]}
-          onPress={() => setStatusFilter(statusFilter === 'false' ? '' : 'false')}
+          style={[
+            styles.filterPill, 
+            statusFilter === false && styles.filterPillDanger,
+            statusFilter === true && styles.filterPillActive
+          ]}
+          onPress={() => setStatusFilter(statusFilter === false ? null : false)}
         >
-          <Text style={[styles.filterText, statusFilter === 'false' && styles.filterTextDanger]}>
+          <Text style={[
+            styles.filterText, 
+            statusFilter === false && styles.filterTextDanger,
+            statusFilter === true && styles.filterTextActive
+          ]}>
             🗑️ Đã xoá mềm
           </Text>
         </TouchableOpacity>

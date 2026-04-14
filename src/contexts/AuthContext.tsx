@@ -2,9 +2,11 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { AuthService } from '../services/authService';
+import { UserService } from '../services/userService';
 
 interface AuthContextType {
   isAuthenticated: boolean;
+  userId: string | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
@@ -12,42 +14,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Web storage helper
-const webStorage = {
-  getItem: (key: string) => {
-    if (typeof window !== 'undefined') {
-      return Promise.resolve(localStorage.getItem(key));
-    }
-    return Promise.resolve(null);
-  },
-  setItem: (key: string, value: string) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(key, value);
-    }
-    return Promise.resolve();
-  },
-  removeItem: (key: string) => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(key);
-    }
-    return Promise.resolve();
-  },
-};
-
-// Choose storage based on platform
-const storage = Platform.OS === 'web' ? webStorage : AsyncStorage;
-
-interface AuthContextType {
-  isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  loading: boolean;
-}
-
-
-
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -56,11 +25,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const checkAuth = async () => {
     try {
-      const token = await storage.getItem('accessToken');
+      const token = await AsyncStorage.getItem('accessToken');
+      const savedUserId = await AsyncStorage.getItem('userId');
       setIsAuthenticated(!!token);
+      setUserId(savedUserId || null);
     } catch (error) {
       console.warn('Auth check failed', error);
       setIsAuthenticated(false);
+      setUserId(null);
     } finally {
       setLoading(false);
     }
@@ -74,8 +46,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw new Error('NOT_ADMIN');
     }
 
-    await storage.setItem('accessToken', response.accessToken);
-    await storage.setItem('refreshToken', response.refreshToken);
+    await AsyncStorage.setItem('accessToken', response.accessToken);
+    await AsyncStorage.setItem('refreshToken', response.refreshToken);
+
+    // Gọi API để lấy profile của user hiện tại (admin)
+    try {
+      const currentUser = await UserService.getCurrentUser();
+      await AsyncStorage.setItem('userId', currentUser.id);
+      setUserId(currentUser.id);
+    } catch (error) {
+      console.warn('Failed to fetch current user:', error);
+      // Fallback nếu /user/me không hoạt động
+      const id = response.userId || response.id;
+      if (id) {
+        await AsyncStorage.setItem('userId', id);
+        setUserId(id);
+      }
+    }
 
     setIsAuthenticated(true);
 
@@ -94,17 +81,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
   const logout = async () => {
-    const refreshToken = await storage.getItem('refreshToken');
+    const refreshToken = await AsyncStorage.getItem('refreshToken');
     if (refreshToken) {
       await AuthService.logout(refreshToken);
     }
-    await storage.removeItem('accessToken');
-    await storage.removeItem('refreshToken');
+    await AsyncStorage.removeItem('accessToken');
+    await AsyncStorage.removeItem('refreshToken');
+    await AsyncStorage.removeItem('userId');
     setIsAuthenticated(false);
+    setUserId(null);
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout, loading }}>
+    <AuthContext.Provider value={{ isAuthenticated, userId, login, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

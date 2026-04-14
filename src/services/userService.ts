@@ -66,4 +66,9 @@ export class UserService {
     const response = await apiClient.user.get(`/user/${id}/avatar`, { responseType: 'blob' });
     return response.data;
   }
+
+  static async getCurrentUser(): Promise<UserProfile> {
+    const response = await apiClient.user.get('/user/me');
+    return response.data;
+  }
 }

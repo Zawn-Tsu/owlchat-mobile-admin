@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import UserManagementScreen from './screens/UserManagementScreen';
+import CreateUserScreen from './screens/CreateUserScreen';
 import ChatManagementScreen from './screens/ChatManagementScreen';
 import SocialManagementScreen from './screens/SocialManagementScreen';
 import MessageManagementScreen from './screens/MessageManagementScreen';
@@ -120,6 +121,18 @@ const AppNavigator: React.FC = () => {
             name="Main"
             component={MainTabs}
             options={{ headerShown: false }}
+          />
+        )}
+        {/* Modal screens - accessible when authenticated */}
+        {isAuthenticated && (
+          <Stack.Screen
+            name="CreateUser"
+            component={CreateUserScreen}
+            options={{
+              headerShown: false,
+              animationEnabled: true,
+              presentation: 'card',
+            }}
           />
         )}
       </Stack.Navigator>

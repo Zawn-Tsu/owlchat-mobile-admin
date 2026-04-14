@@ -7,6 +7,8 @@ export interface LoginResponse {
   accessToken: string;
   refreshToken: string;
   role: string;
+  userId?: string;
+  id?: string;
 }
 
 export interface RefreshRequest {

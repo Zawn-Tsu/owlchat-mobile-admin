@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  SafeAreaView, ScrollView, ActivityIndicator, Alert,
+  SafeAreaView, ScrollView, ActivityIndicator, Alert, Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../contexts/AuthContext';
 import { UserService } from '../services/userService';
 import { ChatService } from '../services/chatService';
@@ -16,11 +17,14 @@ interface ProfileStats {
 }
 
 const ProfileScreen: React.FC = () => {
-  const { logout } = useAuth();
+  const { logout, userId } = useAuth();
   const [stats, setStats] = useState<ProfileStats>({
     totalUsers: 0, totalChats: 0, totalBlocks: 0, totalFriendRequests: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [loadingAvatar, setLoadingAvatar] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -43,8 +47,36 @@ const ProfileScreen: React.FC = () => {
         setLoading(false);
       }
     };
+    
+    const loadAvatarFromServer = async () => {
+      if (!userId) {
+        setLoadingAvatar(false);
+        return;
+      }
+      try {
+        setLoadingAvatar(true);
+        const blob = await UserService.getAvatar(userId);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setSelectedImage(reader.result as string);
+        };
+        reader.readAsDataURL(blob);
+      } catch (error: any) {
+        // Nếu 400 error (không có avatar), dùng emoji default thôi
+        if (error.response?.status === 400) {
+          console.log('User chưa có avatar, dùng emoji default');
+          setSelectedImage(null);
+        } else {
+          console.error('Load avatar error:', error);
+        }
+      } finally {
+        setLoadingAvatar(false);
+      }
+    };
+
     fetchStats();
-  }, []);
+    loadAvatarFromServer();
+  }, [userId]);
 
   const handleLogout = () => {
     Alert.alert(
@@ -55,6 +87,71 @@ const ProfileScreen: React.FC = () => {
         { text: 'Đăng xuất', style: 'destructive', onPress: logout },
       ]
     );
+  };
+
+  const pickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissions();
+    if (!permission.granted) {
+      Alert.alert('Lỗi', 'Bạn cần cấp quyền truy cập thư viện ảnh');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setSelectedImage(result.assets[0].uri);
+      handleUploadImage(result.assets[0].uri);
+    }
+  };
+
+  const handleUploadImage = async (imageUri: string) => {
+    try {
+      setIsUploading(true);
+      const formData = new FormData();
+      
+      const filename = imageUri.split('/').pop() || 'avatar.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+      // @ts-ignore - FormData.append for React Native
+      formData.append('file', {
+        uri: imageUri,
+        type,
+        name: filename,
+      });
+
+      if (userId) {
+        await UserService.uploadAvatar(userId, formData);
+        Alert.alert('Thành công', 'Cập nhật ảnh đại diện thành công');
+        
+        // Reload avatar from server
+        try {
+          const blob = await UserService.getAvatar(userId);
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setSelectedImage(reader.result as string);
+          };
+          reader.readAsDataURL(blob);
+        } catch (reloadError: any) {
+          // Nếu reload fail, giữ ảnh đã select, không crash
+          if (reloadError.response?.status === 400) {
+            console.log('Avatar đã upload, nhưng không thể load lại (có thể server chưa xử lý), giữ ảnh hiện tại');
+          } else {
+            console.error('Reload avatar error:', reloadError);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Upload avatar error:', error);
+      Alert.alert('Lỗi', 'Không thể tải ảnh lên. Vui lòng thử lại.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const formatNumber = (n: number) => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
@@ -84,9 +181,30 @@ const ProfileScreen: React.FC = () => {
       <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
         {/* Avatar Card */}
         <View style={styles.avatarCard}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarEmoji}>🦉</Text>
-          </View>
+          <TouchableOpacity 
+            onPress={pickImage}
+            disabled={isUploading}
+            style={styles.avatarContainer}
+          >
+            {selectedImage ? (
+              <Image
+                source={{ uri: selectedImage }}
+                style={styles.avatarImage}
+              />
+            ) : (
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarEmoji}>🦉</Text>
+              </View>
+            )}
+            {isUploading && (
+              <View style={styles.uploadingOverlay}>
+                <ActivityIndicator size="small" color="#fff" />
+              </View>
+            )}
+            <View style={styles.uploadIconBadge}>
+              <Text style={styles.uploadIconText}>📷</Text>
+            </View>
+          </TouchableOpacity>
           <View style={styles.roleBadge}>
             <Text style={styles.roleBadgeText}>🛡️ Super Admin</Text>
           </View>
@@ -176,10 +294,32 @@ const styles = StyleSheet.create({
     padding: 24, alignItems: 'center',
     shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
   },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 12,
+  },
   avatarCircle: {
     width: 88, height: 88, borderRadius: 44, backgroundColor: '#dcfce7',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+    alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: '#16a34a',
+  },
+  avatarImage: {
+    width: 88, height: 88, borderRadius: 44,
+    borderWidth: 3, borderColor: '#16a34a',
+  },
+  uploadingOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: 44, backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  uploadIconBadge: {
+    position: 'absolute', bottom: 0, right: 0,
+    backgroundColor: '#16a34a', borderRadius: 20, width: 32, height: 32,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 3, borderColor: '#fff',
+  },
+  uploadIconText: {
+    fontSize: 16,
   },
   avatarEmoji: { fontSize: 44 },
   roleBadge: { backgroundColor: '#dcfce7', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 8 },
