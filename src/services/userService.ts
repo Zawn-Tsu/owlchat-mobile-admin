@@ -47,7 +47,7 @@ export class UserService {
     return response.data;
   }
 
-  static async updateUser(id: string, user: { name: string; gender: boolean; dateOfBirth: string; email: string; phoneNumber: string }): Promise<UserProfile> {
+  static async updateUser(id: string, user: Partial<{ name: string; gender: boolean; dateOfBirth: string; email: string; phoneNumber: string }>): Promise<UserProfile> {
     const response = await apiClient.user.put(`/user/${id}`, user);
     return response.data;
   }

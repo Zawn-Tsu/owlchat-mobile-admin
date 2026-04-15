@@ -84,10 +84,10 @@ const UserDetailScreen: React.FC = () => {
       setLoading(true);
       const [userRes, friendsRes, blocksRes, chatsRes, reqRes] = await Promise.all([
         UserService.getUser(userId),
-        SocialService.getFriendships({ userId, size: 100 }).catch(() => ({ content: [] })),
-        SocialService.getBlocks({ userId, size: 100 }).catch(() => ({ content: [] })),
-        ChatService.getChats({ userId, size: 100 }).catch(() => ({ content: [] })),
-        SocialService.getFriendRequests({ userId, size: 100 }).catch(() => ({ content: [] })),
+        SocialService.getFriendships().catch(() => ({ content: [] })),
+        SocialService.getBlocks({ size: 100 }).catch(() => ({ content: [] })),
+        ChatService.getChats({ keywords: userId, size: 100 }).catch(() => ({ content: [] })),
+        SocialService.getFriendRequests({ requesterId: userId, size: 100 }).catch(() => ({ content: [] })),
       ]);
 
       setUser(userRes);

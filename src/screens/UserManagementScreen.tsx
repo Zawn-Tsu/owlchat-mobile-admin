@@ -100,7 +100,7 @@ const UserAPI = {
       const responseText = await response.text();
       console.log('📊 Response Text:', responseText);
       
-      let responseData = {};
+      let responseData: any = {};
       if (responseText) {
         try {
           responseData = JSON.parse(responseText);
@@ -710,10 +710,7 @@ const UserManagementScreen: React.FC = ({ navigation }: any) => {
     try {
       const params: Record<string, any> = {
         page: pageNum,
-        size: PAGE_SIZE,
-        keywords: searchDebounce || undefined,
-        status: statusFilter ? statusFilter : undefined,
-        ascSort: sortBy === 'oldest',
+        size: PAGE_SIZE * 2,
       };
 
       console.log('🔍 [UserManagement] Loading accounts with params:', params);
@@ -725,9 +722,38 @@ const UserManagementScreen: React.FC = ({ navigation }: any) => {
         ? res.data
         : (res.data?.content ?? []);
 
-      // Client-side filtering only for role since backend API doesn't support it directly
-      if (roleFilter) {
-        data = data.filter(account => account.role === roleFilter);
+      // Client-side filtering
+      data = data.filter(account => {
+        // Search filter
+        if (searchDebounce) {
+          const search = searchDebounce.toLowerCase();
+          const matches = 
+            account.username?.toLowerCase().includes(search) ||
+            account.id?.toLowerCase().includes(search);
+          if (!matches) return false;
+        }
+
+        // Status filter (0=all, 1=active, 2=locked)
+        if (statusFilter !== 0) {
+          const isActive = account.status === true;
+          if (statusFilter === 1 && !isActive) return false;
+          if (statusFilter === 2 && isActive) return false;
+        }
+
+        // Role filter
+        if (roleFilter && account.role !== roleFilter) return false;
+
+        return true;
+      });
+
+      // Client-side sorting
+      if (sortBy === 'a-z') {
+        data.sort((a, b) => (a.username || '').localeCompare(b.username || ''));
+      } else if (sortBy === 'oldest') {
+        data.sort((a, b) => new Date(a.createdDate || 0).getTime() - new Date(b.createdDate || 0).getTime());
+      } else {
+        // newest (default)
+        data.sort((a, b) => new Date(b.createdDate || 0).getTime() - new Date(a.createdDate || 0).getTime());
       }
 
       console.log('📊 [UserManagement] Filtered data count:', data.length);
@@ -737,7 +763,7 @@ const UserManagementScreen: React.FC = ({ navigation }: any) => {
       } else {
         setAccounts(prev => [...prev, ...data]);
       }
-      setHasMore(data.length === PAGE_SIZE);
+      setHasMore(data.length === PAGE_SIZE * 2);
       setPage(pageNum);
     } catch (e: any) {
       console.error('❌ Load accounts error:', e);

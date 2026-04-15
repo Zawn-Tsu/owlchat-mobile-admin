@@ -162,7 +162,7 @@ const CreateUserScreen: React.FC = ({ navigation }: any) => {
     setLoading(true);
     try {
       // POST /user with nested structure: { account: {...}, userProfile: {...} }
-      const requestData = {
+      const requestData: any = {
         account: {
           username: accountData.username,
           password: accountData.password,

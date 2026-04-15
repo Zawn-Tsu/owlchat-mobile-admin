@@ -9,11 +9,9 @@ import LoginScreen from './screens/LoginScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import UserManagementScreen from './screens/UserManagementScreen';
 import CreateUserScreen from './screens/CreateUserScreen';
-import ChatManagementScreen from './screens/ChatManagementScreen';
-import SocialManagementScreen from './screens/SocialManagementScreen';
-import MessageManagementScreen from './screens/MessageManagementScreen';
 import ProfileScreen from './screens/Profilescreen';
 import ReportCenterScreen from './screens/ReportCenterScreen';
+import UserDetailScreen from './screens/UserDetailScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -62,22 +60,6 @@ const MainTabs: React.FC = () => {
         options={{
           tabBarLabel: 'Tài khoản',
           tabBarIcon: ({ focused }) => <TabIcon icon="👥" focused={focused} />,
-        }}
-      />
-      <Tab.Screen
-        name="ChatManagement"
-        component={ChatManagementScreen}
-        options={{
-          tabBarLabel: 'Chat',
-          tabBarIcon: ({ focused }) => <TabIcon icon="💬" focused={focused} />,
-        }}
-      />
-      <Tab.Screen
-        name="SocialManagement"
-        component={SocialManagementScreen}
-        options={{
-          tabBarLabel: 'Xã hội',
-          tabBarIcon: ({ focused }) => <TabIcon icon="🌐" focused={focused} />,
         }}
       />
       <Tab.Screen name="ReportCenter" component={ReportCenterScreen}
@@ -130,7 +112,18 @@ const AppNavigator: React.FC = () => {
             component={CreateUserScreen}
             options={{
               headerShown: false,
-              animationEnabled: true,
+              animation: 'default',
+              presentation: 'card',
+            }}
+          />
+        )}
+        {isAuthenticated && (
+          <Stack.Screen
+            name="user-detail"
+            component={UserDetailScreen}
+            options={{
+              headerShown: false,
+              animation: 'default',
               presentation: 'card',
             }}
           />

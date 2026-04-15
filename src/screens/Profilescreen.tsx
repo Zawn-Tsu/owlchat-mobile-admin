@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  SafeAreaView, ScrollView, ActivityIndicator, Alert, Image,
+  SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, Modal, TextInput,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../contexts/AuthContext';
 import { UserService } from '../services/userService';
 import { ChatService } from '../services/chatService';
 import { SocialService } from '../services/socialService';
+import { UserProfile } from '../types/api';
+
+// Pagination size constant - centralized for easy backend updates
+const PAGINATION_SIZE = 100;
 
 interface ProfileStats {
   totalUsers: number;
@@ -25,58 +29,165 @@ const ProfileScreen: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [loadingAvatar, setLoadingAvatar] = useState(true);
+  const [adminProfile, setAdminProfile] = useState<UserProfile | null>(null);
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [editFormData, setEditFormData] = useState<Partial<UserProfile>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchStats = async () => {
       try {
         const [usersRes, chatsRes, blocksRes, friendReqRes] = await Promise.all([
-          UserService.getUsers({ size: 100 }),
-          ChatService.getChats({ size: 100 }),
-          SocialService.getBlocks({ size: 100 }),
-          SocialService.getFriendRequests({ size: 100, ascSort: false }),
+          UserService.getUsers({ size: PAGINATION_SIZE }),
+          ChatService.getChats({ size: PAGINATION_SIZE }),
+          SocialService.getBlocks({ size: PAGINATION_SIZE }),
+          SocialService.getFriendRequests({ size: PAGINATION_SIZE, ascSort: false }),
         ]);
-        setStats({
-          totalUsers: Array.isArray(usersRes) ? usersRes.length : (usersRes?.totalElements ?? 0),
-          totalChats: Array.isArray(chatsRes) ? chatsRes.length : (chatsRes?.totalElements ?? 0),
-          totalBlocks: Array.isArray(blocksRes) ? blocksRes.length : (blocksRes?.totalElements ?? 0),
-          totalFriendRequests: Array.isArray(friendReqRes) ? friendReqRes.length : (friendReqRes?.totalElements ?? 0),
-        });
+        if (isMounted) {
+          setStats({
+            totalUsers: Array.isArray(usersRes) ? usersRes.length : (usersRes?.totalElements ?? 0),
+            totalChats: Array.isArray(chatsRes) ? chatsRes.length : (chatsRes?.totalElements ?? 0),
+            totalBlocks: Array.isArray(blocksRes) ? blocksRes.length : (blocksRes?.totalElements ?? 0),
+            totalFriendRequests: Array.isArray(friendReqRes) ? friendReqRes.length : (friendReqRes?.totalElements ?? 0),
+          });
+        }
       } catch (e) {
         console.error('Profile stats error:', e);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     
     const loadAvatarFromServer = async () => {
       if (!userId) {
-        setLoadingAvatar(false);
+        if (isMounted) setLoadingAvatar(false);
         return;
       }
       try {
-        setLoadingAvatar(true);
+        if (isMounted) setLoadingAvatar(true);
+        // Optimization: If your API supports it, request avatar URL instead of blob
+        // For now, we'll keep blob approach but use it efficiently
         const blob = await UserService.getAvatar(userId);
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setSelectedImage(reader.result as string);
-        };
-        reader.readAsDataURL(blob);
-      } catch (error: any) {
-        // Nếu 400 error (không có avatar), dùng emoji default thôi
-        if (error.response?.status === 400) {
-          console.log('User chưa có avatar, dùng emoji default');
-          setSelectedImage(null);
-        } else {
-          console.error('Load avatar error:', error);
+        if (isMounted) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (isMounted) {
+              setSelectedImage(reader.result as string);
+            }
+          };
+          reader.readAsDataURL(blob);
         }
+      } catch (error: any) {
+        if (isMounted) {
+          if (error.response?.status === 400) {
+            console.log('User chưa có avatar, dùng emoji default');
+            setSelectedImage(null);
+          } else {
+            console.error('Load avatar error:', error);
+          }
+      }
       } finally {
-        setLoadingAvatar(false);
+        if (isMounted) setLoadingAvatar(false);
+      }
+    };
+
+    const loadProfile = async () => {
+      try {
+        const profile = await UserService.getCurrentUser();
+        if (isMounted) {
+          setAdminProfile(profile);
+        }
+      } catch (error) {
+        console.error('Fetch admin profile error:', error);
       }
     };
 
     fetchStats();
+    loadProfile();
     loadAvatarFromServer();
+
+    return () => {
+      isMounted = false;
+    };
   }, [userId]);
+
+  const handleOpenEdit = () => {
+    setEditFormData({
+      name: adminProfile?.name || '',
+      email: adminProfile?.email || '',
+      phoneNumber: adminProfile?.phoneNumber || '',
+      dateOfBirth: adminProfile?.dateOfBirth || '',
+    });
+    setIsEditModalVisible(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!userId) return;
+
+    // Input validation - trim all inputs
+    const email = editFormData.email?.trim() || '';
+    const phoneNumber = editFormData.phoneNumber?.trim() || '';
+    const name = editFormData.name?.trim() || '';
+
+    if (!name) {
+      Alert.alert('Lỗi', 'Vui lòng nhập họ và tên');
+      return;
+    }
+
+    // Email validation: if provided, must be valid. If empty, that's ok.
+    if (email && !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      Alert.alert('Lỗi', 'Địa chỉ email không hợp lệ');
+      return;
+    }
+
+    // Phone validation: if provided, must be valid. If empty, that's ok.
+    if (phoneNumber && !phoneNumber.match(/^[\d\s\-\+\(\)]{10,}$/)) {
+      Alert.alert('Lỗi', 'Số điện thoại không hợp lệ (tối thiểu 10 ký tự)');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      
+      // Build payload - only include non-empty fields like CreateUserScreen
+      const payload: any = {
+        name,
+        gender: editFormData.gender ?? true,
+      };
+
+      // Only include email if it's not empty
+      if (email) {
+        payload.email = email;
+      }
+
+      // Only include phoneNumber if it's not empty
+      if (phoneNumber) {
+        payload.phoneNumber = phoneNumber;
+      }
+
+      // Add optional dateOfBirth only if provided
+      if (editFormData.dateOfBirth && editFormData.dateOfBirth.trim() !== '') {
+        const dobValue = editFormData.dateOfBirth.trim();
+        // Only send if it looks like a valid date format (YYYY-MM-DD)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dobValue)) {
+          payload.dateOfBirth = dobValue;
+        }
+      }
+
+      console.log('📤 Updating profile with payload:', JSON.stringify(payload, null, 2));
+      const updated = await UserService.updateUser(userId, payload);
+      setAdminProfile(updated);
+      setIsEditModalVisible(false);
+      Alert.alert('Thành công', 'Cập nhật thông tin thành công!');
+    } catch (e: any) {
+      console.error('Save profile error:', e);
+      Alert.alert('Lỗi', e?.response?.data?.message || 'Không thể lưu hồ sơ');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -90,7 +201,7 @@ const ProfileScreen: React.FC = () => {
   };
 
   const pickImage = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissions();
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Lỗi', 'Bạn cần cấp quyền truy cập thư viện ảnh');
       return;
@@ -115,8 +226,10 @@ const ProfileScreen: React.FC = () => {
       const formData = new FormData();
       
       const filename = imageUri.split('/').pop() || 'avatar.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : `image/jpeg`;
+      // Robust file extension extraction - handles edge cases
+      const extensionIndex = filename.lastIndexOf('.');
+      const extension = extensionIndex > 0 ? filename.substring(extensionIndex + 1).toLowerCase() : 'jpg';
+      const type = extension ? `image/${extension}` : 'image/jpeg';
 
       // @ts-ignore - FormData.append for React Native
       formData.append('file', {
@@ -129,7 +242,13 @@ const ProfileScreen: React.FC = () => {
         await UserService.uploadAvatar(userId, formData);
         Alert.alert('Thành công', 'Cập nhật ảnh đại diện thành công');
         
-        // Reload avatar from server
+        // OPTIMIZATION: Ideally, server should return avatar URL in response
+        // This would avoid expensive blob -> base64 conversion via FileReader
+        // Current approach: keep the selected image, avoid extra network call
+        // Uncomment below if server returns new URL:
+        // setSelectedImage(newAvatarUrl);
+        
+        // If you must reload, use blob but add isMounted check
         try {
           const blob = await UserService.getAvatar(userId);
           const reader = new FileReader();
@@ -138,9 +257,8 @@ const ProfileScreen: React.FC = () => {
           };
           reader.readAsDataURL(blob);
         } catch (reloadError: any) {
-          // Nếu reload fail, giữ ảnh đã select, không crash
           if (reloadError.response?.status === 400) {
-            console.log('Avatar đã upload, nhưng không thể load lại (có thể server chưa xử lý), giữ ảnh hiện tại');
+            console.log('Avatar uploaded successfully, using local preview');
           } else {
             console.error('Reload avatar error:', reloadError);
           }
@@ -208,12 +326,36 @@ const ProfileScreen: React.FC = () => {
           <View style={styles.roleBadge}>
             <Text style={styles.roleBadgeText}>🛡️ Super Admin</Text>
           </View>
-          <Text style={styles.adminName}>Admin</Text>
-          <Text style={styles.adminEmail}>admin@owlchat.com</Text>
+          <Text style={styles.adminName}>{adminProfile?.name || 'Admin'}</Text>
+          <Text style={styles.adminEmail}>{adminProfile?.email || 'admin@owlchat.com'}</Text>
           <View style={styles.onlinePill}>
             <View style={styles.onlineDot} />
             <Text style={styles.onlineText}>Đang hoạt động</Text>
           </View>
+        </View>
+
+        {/* Thông tin hồ sơ */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitleNoMargin}>Thông tin cá nhân</Text>
+          <TouchableOpacity onPress={handleOpenEdit}>
+            <Text style={styles.editBtnText}>✏️ Chỉnh sửa</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.summaryCard}>
+          {[
+            { icon: '🏷️', title: 'Họ và tên', sub: adminProfile?.name || 'Chưa cập nhật' },
+            { icon: '📱', title: 'Số điện thoại', sub: adminProfile?.phoneNumber || 'Chưa cập nhật' },
+            { icon: '🎂', title: 'Ngày sinh', sub: adminProfile?.dateOfBirth || 'Chưa cập nhật' },
+            { icon: '📧', title: 'Email', sub: adminProfile?.email || 'Chưa cập nhật' },
+          ].map((row, i) => (
+            <View key={i} style={[styles.summaryRow, i > 0 && styles.summaryRowBorder]}>
+              <Text style={styles.summaryIcon}>{row.icon}</Text>
+              <View style={styles.summaryInfo}>
+                <Text style={styles.summaryTitle}>{row.title}</Text>
+                <Text style={styles.summarySubtitle}>{row.sub}</Text>
+              </View>
+            </View>
+          ))}
         </View>
 
         {/* Stats Grid */}
@@ -270,6 +412,44 @@ const ProfileScreen: React.FC = () => {
 
         <View style={{ height: 16 }} />
       </ScrollView>
+
+      {/* Modal chỉnh sửa */}
+      <Modal visible={isEditModalVisible} animationType="slide" transparent onRequestClose={() => setIsEditModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Chỉnh sửa hồ sơ</Text>
+            
+            <View style={styles.field}>
+              <Text style={styles.label}>Họ và tên</Text>
+              <TextInput style={styles.input} value={editFormData.name} onChangeText={t => setEditFormData({...editFormData, name: t})} />
+            </View>
+            
+            <View style={styles.field}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput style={styles.input} value={editFormData.email} onChangeText={t => setEditFormData({...editFormData, email: t})} keyboardType="email-address" />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Số điện thoại</Text>
+              <TextInput style={styles.input} value={editFormData.phoneNumber} onChangeText={t => setEditFormData({...editFormData, phoneNumber: t})} keyboardType="phone-pad" />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Ngày sinh (YYYY-MM-DD)</Text>
+              <TextInput style={styles.input} value={editFormData.dateOfBirth} onChangeText={t => setEditFormData({...editFormData, dateOfBirth: t})} />
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#f3f4f6' }]} onPress={() => setIsEditModalVisible(false)}>
+                <Text style={{ color: '#374151', fontWeight: '600' }}>Huỷ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#16a34a' }]} onPress={handleSaveProfile} disabled={isSaving}>
+                {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '600' }}>Lưu thay đổi</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -349,6 +529,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 14,
     borderRadius: 14, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 2, overflow: 'hidden',
   },
+  sectionHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, marginBottom: 10, marginTop: 4,
+  },
+  sectionTitleNoMargin: { fontSize: 15, fontWeight: 'bold', color: '#111827' },
+  editBtnText: { color: '#16a34a', fontSize: 14, fontWeight: '600' },
+
   summaryRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   summaryRowBorder: { borderTopWidth: 1, borderTopColor: '#f3f4f6' },
   summaryIcon: { fontSize: 20, marginRight: 12 },
@@ -376,6 +563,15 @@ const styles = StyleSheet.create({
   },
   logoutIcon: { fontSize: 18 },
   logoutText: { color: '#ef4444', fontWeight: 'bold', fontSize: 15 },
+  
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 20, textAlign: 'center' },
+  field: { marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 8 },
+  input: { backgroundColor: '#f9fafb', borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', padding: 12, color: '#111827' },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  modalBtn: { flex: 1, alignItems: 'center', padding: 14, borderRadius: 10 },
 });
 
 export default ProfileScreen;
