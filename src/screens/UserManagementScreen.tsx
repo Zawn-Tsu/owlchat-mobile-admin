@@ -296,18 +296,8 @@ const EditProfileModal = ({
         setUploading(true);
         
         try {
-          const token = await AsyncStorage.getItem('accessToken');
-          console.log('🔑 Token retrieved from storage');
-          
-          if (!token) {
-            console.error('❌ No token available!');
-            Alert.alert('Lỗi xác thực', 'Token không có sẵn. Vui lòng đăng nhập lại.');
-            setUploading(false);
-            return;
-          }
-
           console.log('🚀 Calling uploadAvatar...');
-          await UserAPI.uploadAvatar(userId, avatarUri, token);
+          await UserAPI.uploadAvatar(userId, avatarUri, await AsyncStorage.getItem('accessToken') || '');
           console.log('✅ Avatar uploaded successfully!\n');
           
           Alert.alert('Thành công', 'Cập nhật hồ sơ và ảnh đại diện thành công!');
@@ -649,8 +639,6 @@ const UserDetailModal = ({
                 <Text style={[styles.actionBtnText, styles.actionBtnTextDanger]}>🗑️  Xoá tài khoản</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={{ height: 20 }} />
           </ScrollView>
 
           <TouchableOpacity style={styles.modalClose} onPress={onClose}>
@@ -1327,8 +1315,15 @@ list: {
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   modalSheet: {
-    backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8, maxHeight: '90%',
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
+    maxHeight: '90%',
+    flex: 1,
+    flexDirection: 'column',
   },
   modalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   modalAvatar: {
@@ -1338,17 +1333,17 @@ list: {
   },
   modalAvatarText: { fontSize: 32, fontWeight: 'bold', color: '#16a34a' },
   modalName: { fontSize: 20, fontWeight: 'bold', color: '#111827', textAlign: 'center', marginBottom: 8 },
-  modalScroll: { maxHeight: 480 },
+  modalScroll: { flex: 1, minHeight: 100 },
 
-  infoCard: { backgroundColor: '#f9fafb', borderRadius: 14, overflow: 'hidden', marginBottom: 16 },
+  infoCard: { backgroundColor: '#f9fafb', borderRadius: 14, overflow: 'hidden', marginBottom: 16, marginHorizontal: 0, paddingHorizontal: 0 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 },
   infoRowBorder: { borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   infoLabel: { fontSize: 12, color: '#6b7280', fontWeight: '500', flex: 1 },
   infoValue: { fontSize: 13, color: '#111827', fontWeight: '600', flex: 2, textAlign: 'right' },
 
-  actionGroupLabel: { fontSize: 13, fontWeight: '700', color: '#111827', marginTop: 16, marginBottom: 8, marginHorizontal: 14 },
-  actionGroup: { gap: 10, marginBottom: 8 },
-  actionBtn: { borderRadius: 12, padding: 14, alignItems: 'center' },
+  actionGroupLabel: { fontSize: 13, fontWeight: '700', color: '#111827', marginTop: 16, marginBottom: 8, marginHorizontal: 0, paddingHorizontal: 0 },
+  actionGroup: { gap: 10, marginBottom: 8, paddingHorizontal: 0 },
+  actionBtn: { borderRadius: 12, padding: 14, alignItems: 'center', marginHorizontal: 0 },
   actionBtnWarn: { backgroundColor: '#fff7ed', borderWidth: 1, borderColor: '#fed7aa' },
   actionBtnSuccess: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
   actionBtnInfo: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe' },
@@ -1362,8 +1357,13 @@ list: {
   actionBtnTextDanger: { color: '#dc2626' },
 
   modalClose: {
-    marginTop: 8, marginBottom: 4, backgroundColor: '#f3f4f6',
-    borderRadius: 12, padding: 14, alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 0,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalCloseText: { fontSize: 15, fontWeight: '600', color: '#374151' },
 
