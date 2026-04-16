@@ -32,6 +32,9 @@ interface Block {
 
 type TabKey = 'requests' | 'friends' | 'blocks';
 
+// ─── Helper ───────────────────────────────────────────────────────────────────
+const extractData = (response: any) => response?.data?.data || response?.data;
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 const SocialAPI = {
   // Friend requests
@@ -124,7 +127,8 @@ const SocialManagementScreen: React.FC = () => {
       if (reqStatus) params.status = reqStatus;
       if (reqSearch) params.keywords = reqSearch;
       const res = await SocialAPI.getFriendRequests(params);
-      const data: FriendRequest[] = Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+      const responseData = extractData(res);
+      const data: FriendRequest[] = Array.isArray(responseData) ? responseData : (responseData?.content ?? []);
       if (reset || pageNum === 0) setRequests(data);
       else setRequests(prev => [...prev, ...data]);
       setReqHasMore(data.length === PAGE_SIZE);
@@ -174,7 +178,8 @@ const SocialManagementScreen: React.FC = () => {
     if (pageNum === 0) setFriendsLoading(true);
     try {
       const res = await SocialAPI.getFriendships({ page: pageNum, size: PAGE_SIZE });
-      const data: Friendship[] = Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+      const responseData = extractData(res);
+      const data: Friendship[] = Array.isArray(responseData) ? responseData : (responseData?.content ?? []);
       if (reset || pageNum === 0) setFriends(data);
       else setFriends(prev => [...prev, ...data]);
       setFriendsHasMore(data.length === PAGE_SIZE);
@@ -203,7 +208,8 @@ const SocialManagementScreen: React.FC = () => {
     if (pageNum === 0) setBlocksLoading(true);
     try {
       const res = await SocialAPI.getBlocks({ page: pageNum, size: PAGE_SIZE, ascSort: false });
-      const data: Block[] = Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+      const responseData = extractData(res);
+      const data: Block[] = Array.isArray(responseData) ? responseData : (responseData?.content ?? []);
       if (reset || pageNum === 0) setBlocks(data);
       else setBlocks(prev => [...prev, ...data]);
       setBlocksHasMore(data.length === PAGE_SIZE);

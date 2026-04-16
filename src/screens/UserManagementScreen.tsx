@@ -42,7 +42,7 @@ const UserAPI = {
     apiClient.user.get(`/account/${id}`),
 
   updateStatus: (id: string, status: boolean) =>
-    apiClient.user.patch(`/account/${id}/status/${status}`),
+    apiClient.user.patch(`/account/${id}/status/${status}`, {}),
 
   deleteAccount: (id: string) =>
     apiClient.user.delete(`/account/${id}`),
@@ -132,6 +132,9 @@ const UserAPI = {
   getUsers: (params: Record<string, any>) =>
     apiClient.user.get('/user', { params }),
 };
+
+// Helper function to extract data from wrapped response
+const extractData = (response: any) => response?.data?.data || response?.data;
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 const StatusBadge = ({ active }: { active: boolean }) => (
@@ -706,9 +709,10 @@ const UserManagementScreen: React.FC = ({ navigation }: any) => {
       const res = await UserAPI.getAccounts(params);
       console.log('📦 [UserManagement] Raw response:', res);
       
-      let data: Account[] = Array.isArray(res.data)
-        ? res.data
-        : (res.data?.content ?? []);
+      const responseData = extractData(res);
+      let data: Account[] = Array.isArray(responseData)
+        ? responseData
+        : (responseData?.content ?? []);
 
       // Client-side filtering
       data = data.filter(account => {

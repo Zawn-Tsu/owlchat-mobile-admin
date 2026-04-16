@@ -20,6 +20,9 @@ interface Message {
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
+// Helper to extract data from wrapped response
+const extractData = (response: any) => response?.data?.data || response?.data;
+
 const MessageAPI = {
   getMessages: (params: Record<string, any>) =>
     apiClient.chat.get('/admin/message', { params }),
@@ -179,7 +182,8 @@ const MessageManagementScreen: React.FC = () => {
       if (statusFilter !== null) params.status = statusFilter; // null = skip, false = removed, true = active
 
       const res = await MessageAPI.getMessages(params);
-      const data: Message[] = Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+      const responseData = extractData(res);
+      const data: Message[] = Array.isArray(responseData) ? responseData : (responseData?.content ?? []);
       if (reset || pageNum === 0) setMessages(data);
       else setMessages(prev => [...prev, ...data]);
       setHasMore(data.length === PAGE_SIZE);

@@ -6,102 +6,190 @@ import {
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../services/apiClient';
+import { DebugService } from '../services/debugService';
 
 const { width } = Dimensions.get('window');
 
-// ─── MOCK API BINDINGS ──────────────────────────────────────────────────────────
-export const DashAPI = {
-  getAccounts: (params?: Record<string, any>) => apiClient.user.get('/account', { params }),
-  getChats: (params?: Record<string, any>) => apiClient.chat.get('/admin/chat', { params }),
-  getMessages: (params?: Record<string, any>) => apiClient.chat.get('/admin/message', { params }),
-  getBlocks: (params?: Record<string, any>) => apiClient.social.get('/admin/block', { params }),
-  getFriendships: (params?: Record<string, any>) => apiClient.social.get('/admin/friendship', { params }),
-  getFriendRequests: (params?: Record<string, any>) => apiClient.social.get('/admin/friend-request', { params }),
+// ─── UTILITY: Extract data từ response (hỗ trợ cả format cũ & mới) ──────────────
+const extractCount = (response: any): number => {
+  // Format mới: Plain array
+  if (Array.isArray(response?.data)) {
+    return (response.data as any[]).length;
+  }
+  
+  // Format cũ: Wrapped response
+  const wrapped = response?.data?.data || response?.data;
+  if (!wrapped) return 0;
+  if (typeof wrapped.totalElements === 'number') return wrapped.totalElements;
+  if (Array.isArray(wrapped)) return wrapped.length;
+  if (wrapped.content && Array.isArray(wrapped.content)) return wrapped.content.length;
+  return 0;
 };
 
-// ─── FIX 1: GIẢM GỌI API CHO COMPONENT BẰNG SERVICE LAYER ───────────────────────
-export const DashboardService = {
-  getStats: async () => {
-    // Gom tất cả các cuộc gọi vào 1 service. Giúp UX tốt hơn và dễ mở rộng khi có API xịn.
-    const [allU, actU, locU, allC, actC, blk, fri, pendR, allM, remM] = await Promise.all([
-      DashAPI.getAccounts({ size: 1 }),
-      DashAPI.getAccounts({ size: 1, status: 1 }),
-      DashAPI.getAccounts({ size: 1, status: 2 }),
-      DashAPI.getChats({ size: 1 }),
-      DashAPI.getChats({ size: 1, status: true }),
-      DashAPI.getBlocks({ size: 1 }),
-      DashAPI.getFriendships({ size: 1 }),
-      DashAPI.getFriendRequests({ size: 1, status: 'PENDING' }),
-      DashAPI.getMessages({ size: 1 }),
-      DashAPI.getMessages({ size: 1, status: false }), // Giả sử false là đã xóa/thu hồi
-    ]);
-
-    const ex = (r: any): number => {
-      const d = r?.data;
-      if (!d) return 0;
-      if (typeof d.totalElements === 'number') return d.totalElements;
-      if (Array.isArray(d)) return d.length;
-      if (d.content && Array.isArray(d.content)) return d.content.length;
-      return 0;
-    };
-
-    return {
-      users: { total: ex(allU), active: ex(actU), locked: ex(locU) },
-      chats: { total: ex(allC), active: ex(actC) },
-      messages: { total: ex(allM), removed: ex(remM) },
-      social: { friendships: ex(fri), blocks: ex(blk), pending: ex(pendR) }
-    };
-  },
+const extractData = (response: any): any[] => {
+  // Format mới: Plain array
+  if (Array.isArray(response?.data)) {
+    return response.data;
+  }
   
-  getRecentActivities: async () => {
-    // FIX 4: Activity feed đa dạng (User Created, Friend Added, Blocks)
-    try {
-      const [uRes, rRes] = await Promise.all([
-        DashAPI.getAccounts({ size: 3 }),
-        DashAPI.getFriendRequests({ size: 4, ascSort: false })
-      ]);
-      const feed: any[] = [];
-      const users = (Array.isArray(uRes?.data) ? uRes.data : uRes?.data?.content) || [];
-      const reqs = (Array.isArray(rRes?.data) ? rRes.data : rRes?.data?.content) || [];
+  // Format cũ: Wrapped response
+  const wrapped = response?.data?.data || response?.data;
+  if (Array.isArray(wrapped)) return wrapped;
+  if (wrapped?.content && Array.isArray(wrapped.content)) return wrapped.content;
+  return [];
+};
 
-      users.forEach((u: any, i: number) => {
+// ─── DASHBOARD SERVICE: Gom các API calls thành các hàm chính ──────────────────
+export const DashboardService = {
+  /**
+   * Lấy stats: Gom 6 API calls thành 1 Promise.all để tối ưu hiệu suất
+   * Thay vì 10 calls, chỉ cần 6 calls bằng cách param hợp lý
+   */
+  getStats: async () => {
+    try {
+      console.log('📊 Fetching dashboard stats...');
+      
+      const [accounts, chats, messages, friendships, friendRequests, blocks] = await Promise.all([
+        apiClient.user.get('/account', { params: { size: 100 } }).catch(e => {
+          console.error('❌ User API error:', e.message);
+          return { data: { data: [] } };
+        }),
+        apiClient.chat.get('/admin/chat', { params: { size: 100 } }).catch(e => {
+          console.error('❌ Chat API error:', e.message);
+          return { data: { data: [] } };
+        }),
+        apiClient.chat.get('/admin/message', { params: { size: 100 } }).catch(e => {
+          console.error('❌ Message API error:', e.message);
+          return { data: { data: [] } };
+        }),
+        apiClient.social.get('/admin/friendship', { params: { size: 100 } }).catch(e => {
+          console.error('❌ Friendship API error:', e.message);
+          return { data: { data: [] } };
+        }),
+        apiClient.social.get('/admin/friend-request', { params: { size: 100 } }).catch(e => {
+          console.error('❌ Friend request API error:', e.message);
+          return { data: { data: [] } };
+        }),
+        apiClient.social.get('/admin/block', { params: { size: 100 } }).catch(e => {
+          console.error('❌ Block API error:', e.message);
+          return { data: { data: [] } };
+        })
+      ]);
+
+      console.log('✅ All API calls completed');
+      console.log('📦 Accounts:', accounts?.data);
+      console.log('📦 Chats:', chats?.data);
+
+      const accountData = extractData(accounts);
+      const total = extractCount(accounts);
+      const active = accountData.filter((a: any) => a.status === true).length;
+      const locked = accountData.filter((a: any) => a.status === false).length;
+
+      const chatData = extractData(chats);
+      const activeChats = chatData.filter((c: any) => c.status === true).length;
+
+      const msgData = extractData(messages);
+      const removedMsg = msgData.filter((m: any) => m.status === false).length;
+
+      const friendData = extractData(friendships);
+      const friendReqData = extractData(friendRequests);
+      const blockData = extractData(blocks);
+
+      const stats = {
+        users: { total, active, locked },
+        chats: { total: extractCount(chats), active: activeChats },
+        messages: { total: extractCount(messages), removed: removedMsg },
+        social: { friendships: friendData.length, blocks: blockData.length, pending: friendReqData.length }
+      };
+
+      console.log('✅ Stats calculated:', stats);
+      return stats;
+    } catch (err) {
+      console.error('❌ Error fetching stats:', err);
+      return {
+        users: { total: 0, active: 0, locked: 0 },
+        chats: { total: 0, active: 0 },
+        messages: { total: 0, removed: 0 },
+        social: { friendships: 0, blocks: 0, pending: 0 }
+      };
+    }
+  },
+
+  /**
+   * Lấy activities gần đây từ 2 API (users + friend requests)
+   * Merge và format thành activity feed
+   */
+  getRecentActivities: async () => {
+    try {
+      console.log('📝 Fetching recent activities...');
+      
+      const usersRes = await apiClient.user.get('/account', { params: { size: 5 } }).catch(e => {
+        console.error('❌ Users API error:', e.message);
+        return { data: { data: [] } };
+      });
+      
+      const friendReqRes = await apiClient.social.get('/admin/friend-request', { params: { size: 5, ascSort: false } }).catch(e => {
+        console.error('❌ Friend requests API error:', e.message);
+        return { data: { data: [] } };
+      });
+
+      const users = extractData(usersRes);
+      const friendRequests = extractData(friendReqRes);
+      const feed: any[] = [];
+
+      // Activity: Người dùng mới
+      users.forEach((user: any, idx: number) => {
         feed.push({
-          id: `u_${u._id || i}`, icon: '✨', color: '#3b82f6', bg: '#eff6ff',
-          title: u.name || u.phone || 'Người dùng mới',
+          id: `user_${user._id || user.id || idx}`,
+          icon: '✨',
+          bg: '#eff6ff',
+          title: user.name || user.username || 'Người dùng mới',
           desc: 'Vừa tham gia hệ thống OwlChat',
           timeLabel: 'Hôm nay'
         });
       });
 
-      reqs.forEach((r: any, i: number) => {
-        let isBlock = false;
-        if (r.status === 'BLOCKED' || (Math.random() < 0.2)) isBlock = true;
-        if (isBlock) {
-          feed.push({
-            id: `b_${r.id || i}`, icon: '🚫', color: '#ef4444', bg: '#fef2f2',
-            title: r.senderId || 'Hệ thống an ninh',
-            desc: `Ghi nhận hành vi chặn tài khoản (Spam)`,
-            timeLabel: 'Vài giờ trước'
-          });
-        } else {
-          const accepted = r.status === 'ACCEPTED';
-          feed.push({
-            id: `r_${r.id || i}`, icon: accepted ? '🤝' : '📨', 
-            color: accepted ? '#10b981' : '#f59e0b', bg: accepted ? '#ecfdf5' : '#fffbeb',
-            title: r.senderId || 'Người dùng',
-            desc: accepted ? `Đã trở thành bạn bè với ${r.receiverId}` : `Gửi thư kết bạn tới ${r.receiverId}`,
-            timeLabel: r.createdDate ? new Date(r.createdDate).toLocaleDateString('vi-VN') : 'Hôm qua'
-          });
-        }
+      // Activity: Kết bạn + Chặn
+      friendRequests.forEach((req: any, idx: number) => {
+        const isBlocked = req.status === 'BLOCKED';
+        const isAccepted = req.status === 'ACCEPTED';
+
+        feed.push({
+          id: `req_${req.id || idx}`,
+          icon: isBlocked ? '🚫' : isAccepted ? '🤝' : '📨',
+          bg: isBlocked ? '#fef2f2' : isAccepted ? '#ecfdf5' : '#fffbeb',
+          title: req.senderId || 'Người dùng',
+          desc: isBlocked
+            ? 'Ghi nhận hành vi chặn (Spam)'
+            : isAccepted
+            ? `Đã trở thành bạn bè với ${req.receiverId}`
+            : `Gửi thư kết bạn tới ${req.receiverId}`,
+          timeLabel: req.createdDate
+            ? new Date(req.createdDate).toLocaleDateString('vi-VN')
+            : 'Hôm qua'
+        });
       });
-      // Sort shuffle để feed trông phong phú khi fetch pagination không hỗ trợ thời gian tốt
-      return feed.sort(() => Math.random() - 0.5);
-    } catch { return []; }
+
+      console.log('✅ Activities loaded:', feed.length);
+      return feed.slice(0, 8); // Giới hạn 8 activities
+    } catch (err) {
+      console.error('❌ Error fetching activities:', err);
+      return [];
+    }
   }
 };
 
-// ─── UI COMPONENTS ──────────────────────────────────────────────────────────────
-const fmt = (n: number) => n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n);
+// ─── UI UTILITIES ───────────────────────────────────────────────────────────────
+const fmt = (n: number) => n >= 1000 ? (n/1000).toFixed(1) + 'k' : String(n);
+
+const getAlertStyle = (type: 'danger' | 'warning' | 'success') => {
+  const styles = {
+    danger: { bg: '#fef2f2', border: '#ef4444', titleColor: '#991b1b' },
+    warning: { bg: '#fffbeb', border: '#f59e0b', titleColor: '#92400e' },
+    success: { bg: '#f0fdf4', border: '#10b981', titleColor: '#166534' }
+  };
+  return styles[type];
+};
 
 const TrendChart = ({ data, color, title, legend }: any) => {
   const max = Math.max(...data.map((d: any) => d.value), 1);
@@ -144,17 +232,41 @@ const DashboardScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const loadAll = async () => {
     try {
-      const [st, act] = await Promise.all([
-        DashboardService.getStats(),
-        DashboardService.getRecentActivities()
-      ]);
+      setError(null);
+      console.log('🔄 Starting dashboard load...');
+      
+      // Set timeout: 10 seconds max wait
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('API timeout - dữ liệu không phản hồi')), 10000)
+      );
+
+      const [st, act] = await Promise.race([
+        Promise.all([
+          DashboardService.getStats(),
+          DashboardService.getRecentActivities()
+        ]),
+        timeoutPromise as Promise<any>
+      ]) as any;
+
+      console.log('✅ Dashboard data loaded successfully');
       setStats(st);
       setActivities(act);
-    } catch(e) {
-      console.log(e);
+    } catch (err: any) {
+      console.error('❌ Dashboard load failed:', err?.message || err);
+      setError(err?.message || 'Lỗi khi tải dữ liệu dashboard');
+      
+      // Set default stats to show error state
+      setStats({
+        users: { total: 0, active: 0, locked: 0 },
+        chats: { total: 0, active: 0 },
+        messages: { total: 0, removed: 0 },
+        social: { friendships: 0, blocks: 0, pending: 0 }
+      });
+      setActivities([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -164,45 +276,114 @@ const DashboardScreen: React.FC = () => {
   useEffect(() => { loadAll(); }, []);
   const onRefresh = () => { setRefreshing(true); loadAll(); };
 
-  if (loading || !stats) {
+  if (loading) {
     return (
       <View style={s.loadingBox}>
         <ActivityIndicator size="large" color="#0f172a" />
         <Text style={{ color:'#64748b', marginTop:12, fontWeight:'500' }}>Khởi tạo không gian dữ liệu...</Text>
+        
+        <TouchableOpacity 
+          style={[s.debugBtn, { marginTop: 24 }]}
+          onPress={() => DebugService.testAllApis()}
+        >
+          <Text style={{ color: '#fff', fontWeight: '600' }}>🔍 Test API Connections</Text>
+        </TouchableOpacity>
+        
+        <Text style={{ color: '#94a3b8', marginTop: 16, fontSize: 12, textAlign: 'center', paddingHorizontal: 20 }}>
+          Kiểm tra Console (⌘J / Ctrl+J) để xem kết quả test
+        </Text>
       </View>
     );
   }
+  
+  if (error && !stats) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <View style={s.header}>
+          <View>
+            <Text style={s.headSub}>OwlChat Analytics</Text>
+            <Text style={s.headTitle}>Admin Dashboard</Text>
+          </View>
+          <TouchableOpacity style={s.avatar}>
+            <Text style={s.avatarTxt}>🦉</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView 
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#3b82f6" />}
+          style={s.scroll}
+        >
+          <View style={[s.alertBox, { marginHorizontal: 20, marginTop: 20, backgroundColor: '#fef2f2', borderLeftColor: '#ef4444' }]}>
+            <Text style={s.altIcon}>⚠️</Text>
+            <View style={s.altBody}>
+              <Text style={[s.altTit, { color: '#991b1b' }]}>Không thể tải dữ liệu</Text>
+              <Text style={s.altDesc}>{error}</Text>
+              <Text style={[s.altDesc, { marginTop: 10, color: '#0f172a', fontWeight: '600' }]}>Kiểm tra kết nối API hoặc thử tải lại</Text>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
-  // ─── SMART ALERTS LOGIC (Dựa trên tỷ lệ) ───
+  // ─── SMART ALERTS LOGIC (Dựa trên tỷ lệ từ stats) ───────────────────────────────────
   const getSmartAlerts = () => {
-    const alerts = [];
+    if (!stats) return [];
+
+    const alerts: Array<{ type: 'danger' | 'warning' | 'success'; icon: string; title: string; desc: string }> = [];
     const uTotal = Math.max(stats.users.total, 1);
     const mTotal = Math.max(stats.messages.total, 1);
-    
+    const fTotal = Math.max(stats.social.friendships, 1);
+
+    // Alert 1: Tỷ lệ tài khoản bị khóa cao
     if (stats.users.locked / uTotal > 0.15) {
       alerts.push({
-        type: 'danger', icon: '🚨', title: 'Tỉ lệ khóa tài khoản cao',
-        desc: `Khoảng ${(stats.users.locked / uTotal * 100).toFixed(1)}% người dùng bị khóa. Cần kiểm tra hệ thống phát hiện dấu hiệu đăng ký clone hàng loạt.`
+        type: 'danger',
+        icon: '🚨',
+        title: 'Tỉ lệ khóa tài khoản cao',
+        desc: `${(stats.users.locked / uTotal * 100).toFixed(1)}% người dùng bị khóa. Cần kiểm tra hệ thống phát hiện dấu hiệu đăng ký clone.`
       });
     }
+
+    // Alert 2: Tin nhắn bị xoá/thu hồi nhiều
     if (stats.messages.removed / mTotal > 0.05) {
       alerts.push({
-        type: 'warning', icon: '🗑️', title: 'Phát hiện tin nhắn bị thu hồi nhiều',
-        desc: `Có ${stats.messages.removed} tin nhắn bị hệ thống hoặc người dùng xoá. Hãy đặt cảnh báo về vi phạm điều khoản nội dung.`
+        type: 'warning',
+        icon: '🗑️',
+        title: 'Phát hiện tin nhắn bị thu hồi nhiều',
+        desc: `${stats.messages.removed} tin nhắn bị xoá. Đặt cảnh báo về vi phạm điều khoản nội dung.`
       });
     }
-    if (stats.social.blocks > 0 && stats.social.blocks / Math.max(stats.social.friendships, 1) > 0.1) {
+
+    // Alert 3: Hoạt động chặn người dùng tăng
+    if (stats.social.blocks / fTotal > 0.1) {
       alerts.push({
-        type: 'warning', icon: '🛡️', title: 'Hoạt động chặn người dùng tăng',
-        desc: `Phát hiện nhiều báo cáo chặn giao tiếp. Nguy cơ có tài khoản quấy rối trong hệ thống mạng xã hội.`
+        type: 'warning',
+        icon: '🛡️',
+        title: 'Hoạt động chặn người dùng tăng',
+        desc: `${stats.social.blocks} báo cáo chặn giao tiếp. Nguy cơ có tài khoản quấy rối.`
       });
     }
+
+    // Alert 4: Yêu cầu kết bạn đang chờ nhiều
+    if (stats.social.pending / uTotal > 0.2) {
+      alerts.push({
+        type: 'warning',
+        icon: '📨',
+        title: 'Yêu cầu kết bạn chờ đợi cao',
+        desc: `${stats.social.pending} yêu cầu kết bạn đang chờ xử lý.`
+      });
+    }
+
+    // Default success alert
     if (alerts.length === 0) {
       alerts.push({
-        type: 'success', icon: '✨', title: 'Hệ thống đang hoạt động an toàn',
-        desc: 'Tất cả các chỉ số lượng chuyển đổi và hành vi người dùng đều nằm trong ngưỡng tiêu chuẩn.'
+        type: 'success',
+        icon: '✨',
+        title: 'Hệ thống đang hoạt động an toàn',
+        desc: 'Tất cả chỉ số lượng chuyển đổi và hành vi người dùng đều nằm trong ngưỡng tiêu chuẩn.'
       });
     }
+
     return alerts;
   };
 
@@ -275,37 +456,57 @@ const DashboardScreen: React.FC = () => {
         </View>
 
         {/* B. ALERTS (INSIGHT) */}
-        <Text style={s.secTitle}>Insight & Cảnh Báo (Real-time)</Text>
+        <Text style={s.secTitle}>Insight & Cảnh Báo</Text>
         <View style={s.alertsCont}>
-          {smartAlerts.map((alt, i) => (
-             <View key={i} style={[s.alertBox, alt.type==='danger'?s.altDng:alt.type==='warning'?s.altWrn:s.altSuc]}>
-               <Text style={s.altIcon}>{alt.icon}</Text>
-               <View style={s.altBody}>
-                 <Text style={[s.altTit, alt.type==='danger'?s.tcDng:alt.type==='warning'?s.tcWrn:s.tcSuc]}>{alt.title}</Text>
-                 <Text style={s.altDesc}>{alt.desc}</Text>
-               </View>
-             </View>
-          ))}
+          {smartAlerts.map((alert, i) => {
+            const style = getAlertStyle(alert.type);
+            return (
+              <View
+                key={i}
+                style={[
+                  s.alertBox,
+                  {
+                    backgroundColor: style.bg,
+                    borderLeftColor: style.border
+                  }
+                ]}
+              >
+                <Text style={s.altIcon}>{alert.icon}</Text>
+                <View style={s.altBody}>
+                  <Text style={[s.altTit, { color: style.titleColor }]}>{alert.title}</Text>
+                  <Text style={s.altDesc}>{alert.desc}</Text>
+                </View>
+              </View>
+            );
+          })}
         </View>
 
         {/* C. TRENDS (CHARTS) */}
         <Text style={s.secTitle}>Biểu Đồ Xu Hướng</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chartsScrl}>
-          <TrendChart title="Tỉ lệ hoạt động (Users)" color="#3b82f6" legend="Số tài khoản"
+          <TrendChart
+            title="Tỉ lệ hoạt động (Users)"
+            color="#3b82f6"
+            legend="Số tài khoản"
             data={[
-              { label:'Tổng đký', value:stats.users.total },
-              { label:'Đang SD', value:stats.users.active },
-              { label:'Bị khóa', value:stats.users.locked },
-            ]} />
-          <TrendChart title="Tương tác & Quản trị" color="#8b5cf6" legend="Lượng thao tác hệ thống"
+              { label: 'Tổng đky', value: stats.users.total },
+              { label: 'Đang SD', value: stats.users.active },
+              { label: 'Bị khóa', value: stats.users.locked }
+            ]}
+          />
+          <TrendChart
+            title="Tương tác & Quản trị"
+            color="#8b5cf6"
+            legend="Lượng thao tác hệ thống"
             data={[
-              { label:'Tin nhắn', value:stats.messages.total },
-              { label:'Kết bạn', value:stats.social.friendships },
-              { label:'Khóa/Xóa', value:stats.users.locked + stats.messages.removed },
-            ]} />
+              { label: 'Tin nhắn', value: stats.messages.total },
+              { label: 'Kết bạn', value: stats.social.friendships },
+              { label: 'Khóa/Xóa', value: stats.users.locked + stats.messages.removed }
+            ]}
+          />
         </ScrollView>
 
-        {/* D. ACTIVITY FEED CHUẨN */}
+        {/* D. ACTIVITY FEED */}
         <Text style={s.secTitle}>Nhật Ký Sự Kiện Gần Đây</Text>
         <View style={s.feedBox}>
            {activities.length === 0 ? (
@@ -330,7 +531,7 @@ const DashboardScreen: React.FC = () => {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#f8fafc' },
-  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
+  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc', paddingHorizontal: 20 },
   header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headSub: { color: '#64748b', fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
   headTitle: { color: '#0f172a', fontSize: 22, fontWeight: '800', marginTop: 2 },
@@ -355,20 +556,15 @@ const s = StyleSheet.create({
   bxVal: { color: '#0f172a', fontSize: 26, fontWeight: '800' },
   bxLbl: { color: '#475569', fontSize: 13, fontWeight: '600', marginTop: 4 },
   bxSub: { color: '#10b981', fontSize: 11, fontWeight: '600', marginTop: 12 },
-  bxSubTrend: { color: '#8b5cf6', fontSize: 11, fontWeight: '600', marginTop: 12 },
   smlbx: { backgroundColor: '#ffffff', borderRadius: 16, paddingVertical: 16, alignItems: 'center', shadowColor: '#94a3b8', shadowOpacity: 0.1, shadowRadius: 6, elevation: 1 },
   smlVal: { fontSize: 22, fontWeight: '800', marginBottom: 4 },
   smlLbl: { color: '#64748b', fontSize: 12, fontWeight: '600' },
   secTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginHorizontal: 20, marginTop: 20, marginBottom: 14 },
   alertsCont: { paddingHorizontal: 20, gap: 12 },
-  alertBox: { flexDirection: 'row', padding: 16, borderRadius: 16 },
-  altDng: { backgroundColor: '#fef2f2', borderLeftWidth: 4, borderLeftColor: '#ef4444' },
-  altWrn: { backgroundColor: '#fffbeb', borderLeftWidth: 4, borderLeftColor: '#f59e0b' },
-  altSuc: { backgroundColor: '#f0fdf4', borderLeftWidth: 4, borderLeftColor: '#10b981' },
+  alertBox: { flexDirection: 'row', padding: 16, borderRadius: 16, borderLeftWidth: 4 },
   altIcon: { fontSize: 24, marginRight: 14 },
   altBody: { flex: 1 },
   altTit: { fontSize: 14, fontWeight: '700', marginBottom: 4 },
-  tcDng: { color: '#991b1b' }, tcWrn: { color: '#92400e' }, tcSuc: { color: '#166534' },
   altDesc: { fontSize: 12.5, color: '#475569', lineHeight: 18 },
   chartsScrl: { paddingHorizontal: 20, gap: 16, paddingRight: 40 },
   chartBox: { backgroundColor: '#ffffff', borderRadius: 20, padding: 20, width: 280, shadowColor: '#94a3b8', shadowOpacity: 0.1, shadowRadius: 8, elevation: 2 },
@@ -389,7 +585,8 @@ const s = StyleSheet.create({
   feedTit: { fontSize: 14, fontWeight: '700', color: '#0f172a', marginBottom: 2 },
   feedDesc: { fontSize: 12, color: '#64748b' },
   feedTime: { fontSize: 11, color: '#94a3b8', fontWeight: '500' },
-  noFeed: { textAlign: 'center', color: '#94a3b8', fontSize: 13, marginTop: 10 }
+  noFeed: { textAlign: 'center', color: '#94a3b8', fontSize: 13, marginTop: 10 },
+  debugBtn: { backgroundColor: '#3b82f6', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, alignItems: 'center' }
 });
 
 export default DashboardScreen;

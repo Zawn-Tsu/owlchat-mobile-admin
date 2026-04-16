@@ -33,7 +33,7 @@ export const ReportAPI = {
 
   // ─── USER ─────────────────────────────
   updateAccountStatus: (id: string, status: boolean) =>
-    apiClient.user.patch(`/account/${id}/status/${status}`),
+    apiClient.user.patch(`/account/${id}/status/${status}`, {}),
 };
 
 const SeverityBadge = ({ severity }: { severity: Severity }) => {
@@ -149,7 +149,8 @@ const ReportCenterScreen: React.FC = () => {
     else setLoadingMore(true);
     try {
       const res = await ReportAPI.getBlocks({ page: pageNum, size: PAGE_SIZE, ascSort: false });
-      const data: Block[] = Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+      const responseData = extractData(res);
+      const data: Block[] = Array.isArray(responseData) ? responseData : (responseData?.content ?? []);
       const newMap = { ...severityMap };
       data.forEach(b => { if (!newMap[b.id]) newMap[b.id] = 'LOW'; });
       setSeverityMap(newMap);

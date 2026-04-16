@@ -29,6 +29,9 @@ interface Member {
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
+// Helper to extract data from wrapped response
+const extractData = (response: any) => response?.data?.data || response?.data;
+
 const ChatAPI = {
   getChats: (params: Record<string, any>) =>
     apiClient.chat.get('/admin/chat', { params }),
@@ -42,7 +45,7 @@ const ChatAPI = {
   updateStatus: (chatId: string, status: boolean) =>
     apiClient.chat.patch(
       `/admin/chat/${chatId}/status`,
-      { status } // 👈 gửi object chuẩn
+      { status }
     ),
 
   getMembers: (chatId: string) =>
@@ -94,7 +97,10 @@ const MembersModal = ({
     if (visible && chat) {
       setLoading(true);
       ChatAPI.getMembers(chat.id)
-        .then(res => setMembers(Array.isArray(res.data) ? res.data : (res.data?.content ?? [])))
+        .then(res => {
+          const responseData = extractData(res);
+          setMembers(Array.isArray(responseData) ? responseData : (responseData?.content ?? []));
+        })
         .catch(() => {})
         .finally(() => setLoading(false));
     }
@@ -323,7 +329,8 @@ const ChatManagementScreen: React.FC = () => {
       if (statusFilter !== '') params.status = statusFilter;
 
       const res = await ChatAPI.getChats(params);
-      const data: Chat[] = Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+      const responseData = extractData(res);
+      const data = Array.isArray(responseData) ? responseData : (responseData?.content ?? []);
       if (reset || pageNum === 0) setChats(data);
       else setChats(prev => [...prev, ...data]);
       setHasMore(data.length === PAGE_SIZE);
