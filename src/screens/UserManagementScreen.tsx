@@ -4,6 +4,7 @@ import {
   SafeAreaView, ActivityIndicator, RefreshControl, TextInput,
   Alert, Modal, ScrollView, Image,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiClient } from '../services/apiClient';
@@ -55,6 +56,9 @@ const UserAPI = {
 
   updateUserProfile: (id: string, data: Partial<UserProfile>) =>
     apiClient.user.put(`/user/${id}`, data),
+
+  deleteUserProfile: (id: string) =>
+    apiClient.user.delete(`/user/${id}`),
 
   uploadAvatar: async (id: string, imageUri: string, token: string) => {
     console.log('========================================');
@@ -695,6 +699,14 @@ const UserManagementScreen: React.FC = ({ navigation }: any) => {
     loadAccounts(0, true);
   }, [searchDebounce, statusFilter, roleFilter, sortBy]);
 
+  // Auto-reload when screen focus (in case user was deleted elsewhere)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🎯 [useFocusEffect] Screen focused - reloading data');
+      loadAccounts(0, true);
+    }, [])
+  );
+
   const loadAccounts = async (pageNum = 0, reset = false) => {
     if (pageNum === 0) setLoading(true);
     else setLoadingMore(true);
@@ -823,11 +835,23 @@ const UserManagementScreen: React.FC = ({ navigation }: any) => {
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('🗑️ [Delete] Deleting account:', id);
+              
+              // Only call deleteAccount - backend handles cascade delete
               await UserAPI.deleteAccount(id);
-              setAccounts(prev => prev.filter(a => a.id !== id));
+              
+              console.log('✅ [Delete] Account deleted successfully');
               setModalVisible(false);
-            } catch {
-              Alert.alert('Lỗi', 'Không thể xoá tài khoản.');
+              Alert.alert('✅ Thành công', 'Đã xoá tài khoản.');
+              // Reload data
+              loadAccounts(0, true);
+            } catch (e: any) {
+              console.error('❌ [Delete] Error:', e);
+              console.error('❌ Status:', e?.response?.status);
+              console.error('❌ Message:', e?.response?.data?.message);
+              
+              const msg = e?.response?.data?.message || e?.message || 'Không thể xoá tài khoản.';
+              Alert.alert('❌ Lỗi', msg);
             }
           },
         },

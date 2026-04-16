@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
   ScrollView, ActivityIndicator, Alert, Image, Modal, TextInput, RefreshControl,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { UserService } from '../services/userService';
 import { SocialService } from '../services/socialService';
@@ -28,6 +29,9 @@ const UserDetailScreen: React.FC = () => {
   const [editFormData, setEditFormData] = useState<Partial<UserProfile>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isAvatarModalVisible, setIsAvatarModalVisible] = useState(false);
+  const [newAvatarUri, setNewAvatarUri] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   useEffect(() => { loadUserData(); }, [userId]);
 
@@ -52,20 +56,86 @@ const UserDetailScreen: React.FC = () => {
     }
   };
 
-  const loadFriendDetails = async (friendIds: string[]) => {
+  const loadFriendDetails = async (friendIds: string[]): Promise<Set<string>> => {
     console.log('👥 Loading friend details for:', friendIds);
     const details = new Map<string, UserProfile>();
+    const validFriendIds = new Set<string>();
+    const deletedFriendIds = new Set<string>();
+    
     for (const id of friendIds) {
       try {
         const profile = await UserService.getUser(id);
+        // Check if user is deleted or inactive
+        if (profile.status === 'DELETED' || (profile as any).deletedAt) {
+          console.warn(`⚠️ Friend ${id} is deleted`);
+          deletedFriendIds.add(id);
+          continue;
+        }
         details.set(id, profile);
+        validFriendIds.add(id);
         console.log(`✅ Loaded ${id}: ${profile.name}`);
-      } catch (e) {
-        console.error(`❌ Failed to load friend ${id}:`, e);
+      } catch (e: any) {
+        if (e.response?.status === 404) {
+          console.error(`❌ Friend ${id} not found (404) - user was deleted`);
+          deletedFriendIds.add(id);
+        } else {
+          console.error(`❌ Failed to load friend ${id}:`, e);
+        }
       }
     }
+    
     setFriendDetails(details);
-    console.log('📊 Friend details loaded:', details.size);
+    console.log('📊 Friend details loaded:', details.size, '| Deleted:', deletedFriendIds.size);
+    return validFriendIds; // Return set of valid IDs for filtering
+  };
+
+  const validateBlockedUser = async (blockedId: string): Promise<boolean> => {
+    try {
+      const profile = await UserService.getUser(blockedId);
+      if (profile.status === 'DELETED' || (profile as any).deletedAt) {
+        console.warn(`⚠️ Blocked user ${blockedId} is deleted`);
+        return false;
+      }
+      return true;
+    } catch (e: any) {
+      if (e.response?.status === 404) {
+        console.error(`❌ Blocked user ${blockedId} not found (404)`);
+        return false;
+      }
+      return true; // Assume valid if other errors
+    }
+  };
+
+  const validateChatRoom = async (chatId: string): Promise<boolean> => {
+    try {
+      // Try to check if chat exists by attempting to access it
+      // If 404 or user deleted, remove it
+      // For now, assume chats are valid if we got them from API
+      return true;
+    } catch (e: any) {
+      return false;
+    }
+  };
+
+  const validateFriendRequest = async (senderId: string, receiverId: string): Promise<boolean> => {
+    try {
+      const senderProfile = await UserService.getUser(senderId).catch(() => null);
+      const receiverProfile = await UserService.getUser(receiverId).catch(() => null);
+      
+      // If either user is deleted, remove the request
+      if (!senderProfile || senderProfile.status === 'DELETED' || (senderProfile as any).deletedAt) {
+        console.warn(`⚠️ Friend request sender ${senderId} is deleted`);
+        return false;
+      }
+      if (!receiverProfile || receiverProfile.status === 'DELETED' || (receiverProfile as any).deletedAt) {
+        console.warn(`⚠️ Friend request receiver ${receiverId} is deleted`);
+        return false;
+      }
+      return true;
+    } catch (e: any) {
+      console.error(`❌ Failed to validate friend request:`, e);
+      return false;
+    }
   };
 
   const loadUserData = async () => {
@@ -88,29 +158,84 @@ const UserDetailScreen: React.FC = () => {
       const reqData = Array.isArray(reqRes) ? reqRes : (reqRes as any)?.content ?? [];
 
       // Lọc chỉ lấy data liên quan đến userId này
-      // Nếu API trả về mảng trực tiếp (đã filter), không cần filter thêm
       const filteredFriends = friendsData.filter((f: Friendship) => {
         const isRelated = f.firstUserId === userId || f.secondUserId === userId;
-        console.log('🔍 Friend check:', { friendshipId: f.id, firstUserId: f.firstUserId, secondUserId: f.secondUserId, userId, isRelated });
         return isRelated;
       });
-      console.log('📊 Friends summary:', { totalFromAPI: friendsData.length, filtered: filteredFriends.length });
-      setFriends(filteredFriends || friendsData); // Fallback to raw data nếu filter empty
-      setBlocks(blocksData.filter((b: Block) => b.blockerId === userId) || blocksData);
-      setChats(chatsData.filter((c: Chat) => c.initiatorId === userId) || chatsData);
-      setRequests(reqData.filter((r: FriendRequest) => r.senderId === userId || r.receiverId === userId) || reqData);
+      
+      const filteredBlocks = blocksData.filter((b: Block) => b.blockerId === userId);
+      const filteredChats = chatsData.filter((c: Chat) => c.initiatorId === userId);
+      const filteredRequests = reqData.filter((r: FriendRequest) => r.senderId === userId || r.receiverId === userId);
+      
+      console.log('📊 Data before validation:', { 
+        friends: filteredFriends.length, 
+        blocks: filteredBlocks.length,
+        chats: filteredChats.length,
+        requests: filteredRequests.length 
+      });
 
-      // Load avatar after user data
+      // Load avatar
       await loadAvatar();
 
-      // Load friend names/profiles after data loaded
-      const friendsToLoad = (filteredFriends || friendsData).map((f: Friendship) => 
+      // ===== VALIDATE & FILTER FRIENDS =====
+      let validatedFriends = filteredFriends;
+      const friendsToLoad = filteredFriends.map((f: Friendship) => 
         f.firstUserId === userId ? f.secondUserId : f.firstUserId
       );
+      
       if (friendsToLoad.length > 0) {
-        await loadFriendDetails(friendsToLoad);
+        console.log('🔍 Validating friends...');
+        const validFriendIds = await loadFriendDetails(friendsToLoad);
+        // Filter friends to only include valid ones
+        validatedFriends = filteredFriends.filter(f => {
+          const friendId = f.firstUserId === userId ? f.secondUserId : f.firstUserId;
+          const isValid = validFriendIds.has(friendId);
+          if (!isValid) console.log(`❌ Removing invalid friend: ${friendId}`);
+          return isValid;
+        });
+        console.log(`✅ Valid friends: ${validatedFriends.length} (removed ${filteredFriends.length - validatedFriends.length})`);
       }
+      
+      setFriends(validatedFriends);
+
+      // ===== VALIDATE & FILTER BLOCKS =====
+      console.log('🔍 Validating blocked users...');
+      const validBlocks: Block[] = [];
+      for (const block of filteredBlocks) {
+        const isValid = await validateBlockedUser(block.blockedId);
+        if (isValid) {
+          validBlocks.push(block);
+        } else {
+          console.log(`❌ Removing deleted blocked user: ${block.blockedId}`);
+        }
+      }
+      setBlocks(validBlocks);
+
+      // ===== VALIDATE & FILTER REQUESTS =====
+      console.log('🔍 Validating friend requests...');
+      const validRequests: FriendRequest[] = [];
+      for (const req of filteredRequests) {
+        const isValid = await validateFriendRequest(req.senderId, req.receiverId);
+        if (isValid) {
+          validRequests.push(req);
+        } else {
+          console.log(`❌ Removing friend request from ${req.senderId} to ${req.receiverId}`);
+        }
+      }
+      setRequests(validRequests);
+
+      // Chats are usually safe (group chats), but could add validation if needed
+      setChats(filteredChats);
+      
+      console.log('📊 Data after validation:', { 
+        friends: validatedFriends.length, 
+        blocks: validBlocks.length,
+        chats: filteredChats.length,
+        requests: validRequests.length 
+      });
+      
     } catch (error) {
+      console.error('❌ Load user data error:', error);
       Alert.alert('Lỗi', 'Không thể tải thông tin user');
     } finally {
       setLoading(false);
@@ -119,6 +244,72 @@ const UserDetailScreen: React.FC = () => {
   };
 
   const onRefresh = () => { setRefreshing(true); loadUserData(); };
+
+  const pickAvatarImage = async () => {
+    try {
+      console.log('📸 [Avatar] Picking image...');
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        const imageUri = result.assets[0].uri;
+        console.log('📸 [Avatar] Image selected:', imageUri);
+        setNewAvatarUri(imageUri);
+      }
+    } catch (e) {
+      console.error('❌ [Avatar] Image pick error:', e);
+      Alert.alert('Lỗi', 'Không thể chọn ảnh');
+    }
+  };
+
+  const handleUploadAvatar = async () => {
+    if (!newAvatarUri || !userId) {
+      Alert.alert('Lỗi', 'Vui lòng chọn ảnh');
+      return;
+    }
+
+    try {
+      setIsUploadingAvatar(true);
+      console.log('🚀 [Avatar] Starting avatar upload...');
+      
+      const formData = new FormData();
+      
+      const filename = newAvatarUri.split('/').pop() || 'avatar.jpg';
+      // Extract file extension
+      const extensionIndex = filename.lastIndexOf('.');
+      const extension = extensionIndex > 0 ? filename.substring(extensionIndex + 1).toLowerCase() : 'jpg';
+      const type = extension ? `image/${extension}` : 'image/jpeg';
+
+      // IMPORTANT: Use 'file' as the field name, not 'avatar'
+      formData.append('file', {
+        uri: newAvatarUri,
+        type,
+        name: filename,
+      } as any);
+
+      console.log('📍 [Avatar] Uploading with filename:', filename, 'type:', type);
+      
+      await UserService.uploadAvatar(userId, formData);
+      
+      console.log('✅ [Avatar] Avatar uploaded successfully!');
+      Alert.alert('✅ Thành công', 'Cập nhật ảnh đại diện thành công!');
+      setIsAvatarModalVisible(false);
+      setNewAvatarUri(null);
+      
+      // Reload avatar
+      await loadAvatar();
+    } catch (error: any) {
+      console.error('❌ [Avatar] Upload error:', error);
+      const msg = error?.response?.data?.message || error?.message || 'Không thể tải ảnh';
+      Alert.alert('❌ Lỗi', msg);
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   const handleOpenEdit = () => {
     if (!user) return;
@@ -171,11 +362,21 @@ const UserDetailScreen: React.FC = () => {
         text: 'Xóa', style: 'destructive', onPress: async () => {
           try {
             setIsDeleting(true);
-            await UserService.deleteUser(userId);
-            Alert.alert('Thành công', 'Đã xóa tài khoản!');
+            console.log('🗑️ [DeleteAccount] Deleting account:', userId);
+            
+            // Only call deleteAccount - backend handles cascade delete
+            await UserService.deleteAccount(userId);
+            
+            console.log('✅ [DeleteAccount] Account deleted successfully');
+            Alert.alert('✅ Thành công', 'Đã xóa tài khoản!');
             navigation.goBack();
           } catch (e: any) {
-            Alert.alert('Lỗi', e?.response?.data?.message || 'Không thể xóa tài khoản');
+            console.error('❌ [DeleteAccount] Error:', e);
+            console.error('❌ Status:', e?.response?.status);
+            console.error('❌ Message:', e?.response?.data?.message);
+            
+            const msg = e?.response?.data?.message || e?.message || 'Không thể xóa tài khoản';
+            Alert.alert('❌ Lỗi', msg);
           } finally {
             setIsDeleting(false);
           }
@@ -291,13 +492,21 @@ const UserDetailScreen: React.FC = () => {
       >
         {/* User Card */}
         <View style={styles.userCard}>
-          {avatar ? (
-            <Image source={{ uri: avatar }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarEmoji}>👤</Text>
-            </View>
-          )}
+          <TouchableOpacity onPress={() => setIsAvatarModalVisible(true)}>
+            {avatar ? (
+              <Image source={{ uri: avatar }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarEmoji}>👤</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.uploadAvatarBtn}
+            onPress={() => setIsAvatarModalVisible(true)}
+          >
+            <Text style={styles.uploadAvatarBtnText}>📸 Cập nhật ảnh</Text>
+          </TouchableOpacity>
           <Text style={styles.userName}>{user.name}</Text>
           <Text style={styles.userId}>{user.id}</Text>
 
@@ -483,6 +692,63 @@ const UserDetailScreen: React.FC = () => {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Avatar Upload Modal */}
+      <Modal visible={isAvatarModalVisible} transparent animationType="fade" onRequestClose={() => setIsAvatarModalVisible(false)}>
+        <View style={styles.avatarModalOverlay}>
+          <View style={styles.avatarModalContent}>
+            <Text style={styles.avatarModalTitle}>📸 Cập nhật ảnh đại diện</Text>
+            
+            <View style={styles.avatarPreviewBox}>
+              {newAvatarUri ? (
+                <Image source={{ uri: newAvatarUri }} style={styles.avatarModalPreview} />
+              ) : avatar ? (
+                <Image source={{ uri: avatar }} style={styles.avatarModalPreview} />
+              ) : (
+                <View style={styles.avatarModalPlaceholder}>
+                  <Text style={styles.avatarModalPlaceholderText}>👤</Text>
+                </View>
+              )}
+            </View>
+
+            {newAvatarUri && (
+              <Text style={styles.avatarModalHint}>✓ Đã chọn ảnh mới</Text>
+            )}
+
+            <TouchableOpacity
+              style={styles.avatarModalPickBtn}
+              onPress={pickAvatarImage}
+              disabled={isUploadingAvatar}
+            >
+              <Text style={styles.avatarModalPickBtnText}>
+                {isUploadingAvatar ? '⏳ Đang tải lên...' : '📁 Chọn ảnh từ thư viện'}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.avatarModalBtnRow}>
+              <TouchableOpacity
+                style={[styles.avatarModalBtn, styles.avatarModalBtnCancel]}
+                onPress={() => {
+                  setIsAvatarModalVisible(false);
+                  setNewAvatarUri(null);
+                }}
+                disabled={isUploadingAvatar}
+              >
+                <Text style={styles.avatarModalBtnCancelText}>Huỷ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.avatarModalBtn, styles.avatarModalBtnSave, !newAvatarUri && { opacity: 0.5 }]}
+                onPress={handleUploadAvatar}
+                disabled={!newAvatarUri || isUploadingAvatar}
+              >
+                <Text style={styles.avatarModalBtnSaveText}>
+                  {isUploadingAvatar ? '⏳' : '✓ Lưu'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -514,6 +780,11 @@ const styles = StyleSheet.create({
     borderWidth: 3, borderColor: '#16a34a', alignItems: 'center', justifyContent: 'center', marginBottom: 12,
   },
   avatarEmoji: { fontSize: 36 },
+  uploadAvatarBtn: {
+    backgroundColor: '#16a34a', paddingHorizontal: 12, paddingVertical: 8, 
+    borderRadius: 6, marginBottom: 12,
+  },
+  uploadAvatarBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   userName: { fontSize: 22, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
   userId: { fontSize: 12, color: '#9ca3af', marginBottom: 16 },
 
@@ -598,6 +869,35 @@ const styles = StyleSheet.create({
   modalBtnCancelText: { fontSize: 14, fontWeight: '600', color: '#374151' },
   modalBtnSave: { backgroundColor: '#16a34a' },
   modalBtnSaveText: { fontSize: 14, fontWeight: '600', color: '#fff' },
+
+  // Avatar Upload Modal Styles
+  avatarModalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center',
+  },
+  avatarModalContent: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '85%',
+    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
+  },
+  avatarModalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 16, textAlign: 'center' },
+  avatarPreviewBox: { alignItems: 'center', marginBottom: 16 },
+  avatarModalPreview: { width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: '#16a34a' },
+  avatarModalPlaceholder: {
+    width: 120, height: 120, borderRadius: 60, backgroundColor: '#dcfce7',
+    borderWidth: 2, borderColor: '#16a34a', justifyContent: 'center', alignItems: 'center',
+  },
+  avatarModalPlaceholderText: { fontSize: 48 },
+  avatarModalHint: { textAlign: 'center', color: '#16a34a', fontSize: 12, fontWeight: '600', marginBottom: 12 },
+  avatarModalPickBtn: {
+    backgroundColor: '#3b82f6', paddingVertical: 12, borderRadius: 8, marginBottom: 16,
+    alignItems: 'center',
+  },
+  avatarModalPickBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  avatarModalBtnRow: { flexDirection: 'row', gap: 12 },
+  avatarModalBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+  avatarModalBtnCancel: { backgroundColor: '#e5e7eb' },
+  avatarModalBtnCancelText: { fontSize: 14, fontWeight: '600', color: '#374151' },
+  avatarModalBtnSave: { backgroundColor: '#16a34a' },
+  avatarModalBtnSaveText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 });
 
 export default UserDetailScreen;

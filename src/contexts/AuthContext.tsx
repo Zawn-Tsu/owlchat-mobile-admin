@@ -39,46 +39,69 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const login = async (username: string, password: string) => {
-  try {
-    const response = await AuthService.login({ username, password });
-
-    if (response.role !== 'ADMIN') {
-      throw new Error('NOT_ADMIN');
-    }
-
-    await AsyncStorage.setItem('accessToken', response.accessToken);
-    await AsyncStorage.setItem('refreshToken', response.refreshToken);
-
-    // Gọi API để lấy profile của user hiện tại (admin)
     try {
-      const currentUser = await UserService.getCurrentUser();
-      await AsyncStorage.setItem('userId', currentUser.id);
-      setUserId(currentUser.id);
-    } catch (error) {
-      console.warn('Failed to fetch current user:', error);
-      // Fallback nếu /user/me không hoạt động
-      const id = response.userId || response.id;
-      if (id) {
-        await AsyncStorage.setItem('userId', id);
-        setUserId(id);
+      const response = await AuthService.login({ username, password });
+
+      if (response.role !== 'ADMIN') {
+        throw new Error('Not an admin account');
       }
+
+      await AsyncStorage.setItem('accessToken', response.accessToken);
+      await AsyncStorage.setItem('refreshToken', response.refreshToken);
+
+      // Gọi API để lấy profile của user hiện tại (admin)
+      try {
+        const currentUser = await UserService.getCurrentUser();
+        await AsyncStorage.setItem('userId', currentUser.id);
+        setUserId(currentUser.id);
+      } catch (error) {
+        console.warn('Failed to fetch current user:', error);
+        // Fallback nếu /user/me không hoạt động
+        const id = response.userId || response.id;
+        if (id) {
+          await AsyncStorage.setItem('userId', id);
+          setUserId(id);
+        }
+      }
+
+      setIsAuthenticated(true);
+
+    } catch (error: any) {
+      console.log('FULL ERROR:', error);
+      console.log('Error response data:', error?.response?.data);
+      console.log('Error response status:', error?.response?.status);
+
+      // 👉 Lấy message từ backend
+      // Backend trả về plain text, không phải JSON
+      let message = '';
+      
+      if (error?.response?.data) {
+        // Nếu response.data là string (plain text)
+        if (typeof error.response.data === 'string') {
+          message = error.response.data;
+        }
+        // Nếu là object JSON
+        else if (typeof error.response.data === 'object') {
+          message = error.response.data?.message || 
+                   error.response.data?.localizedMessage || 
+                   JSON.stringify(error.response.data);
+        }
+      }
+      
+      // Nếu là custom error từ role check
+      if (error.message && error.message.includes('admin')) {
+        message = error.message;
+      }
+      
+      // Fallback
+      if (!message) {
+        message = error?.message || 'Đăng nhập thất bại';
+      }
+
+      console.log('Final message:', message);
+      throw new Error(message);
     }
-
-    setIsAuthenticated(true);
-
-  } catch (error: any) {
-  console.log('FULL ERROR:', error);
-
-  // 👉 lấy message từ backend
-  const message =
-    error?.response?.data?.message ||
-    error?.response?.data?.localizedMessage ||
-    error?.message ||
-    'Đăng nhập thất bại';
-
-  throw new Error(message);
-}
-};
+  };
 
   const logout = async () => {
     const refreshToken = await AsyncStorage.getItem('refreshToken');

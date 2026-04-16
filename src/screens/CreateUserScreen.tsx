@@ -238,9 +238,13 @@ const CreateUserScreen: React.FC = ({ navigation }: any) => {
 
             {/* Username */}
             <View style={styles.field}>
-              <Text style={styles.label}>Username *</Text>
+              <Text style={styles.label}>👤 Username *</Text>
               <TextInput
-                style={[styles.input, usernameError && styles.inputError]}
+                style={[
+                  styles.input,
+                  username && validateUsername(username).valid && styles.inputSuccess,
+                  username && !validateUsername(username).valid && styles.inputError,
+                ]}
                 placeholder="Ít nhất 3 ký tự"
                 placeholderTextColor="#9ca3af"
                 value={username}
@@ -249,13 +253,11 @@ const CreateUserScreen: React.FC = ({ navigation }: any) => {
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-              {usernameError && (
-                <Text style={[styles.errorText, !validateUsername(username).valid && styles.errorTextActive]}>
-                  {usernameError}
-                </Text>
+              {username && validateUsername(username).valid && (
+                <Text style={styles.successText}>✓ Username hợp lệ</Text>
               )}
-              {!usernameError && username && (
-                <Text style={styles.helperTextSuccess}>✓ Username hợp lệ</Text>
+              {username && !validateUsername(username).valid && (
+                <Text style={styles.errorMessageText}>{usernameError}</Text>
               )}
               {!username && (
                 <Text style={styles.helperText}>Chỉ chứa chữ, số, dấu gạch dưới (_)</Text>
@@ -264,9 +266,13 @@ const CreateUserScreen: React.FC = ({ navigation }: any) => {
 
             {/* Password */}
             <View style={styles.field}>
-              <Text style={styles.label}>Mật khẩu *</Text>
+              <Text style={styles.label}>🔐 Mật khẩu *</Text>
               <TextInput
-                style={[styles.input, passwordError && styles.inputError]}
+                style={[
+                  styles.input,
+                  password && validatePassword(password).valid && styles.inputSuccess,
+                  password && !validatePassword(password).valid && styles.inputError,
+                ]}
                 placeholder="Ít nhất 6 ký tự"
                 placeholderTextColor="#9ca3af"
                 value={password}
@@ -274,13 +280,11 @@ const CreateUserScreen: React.FC = ({ navigation }: any) => {
                 editable={!loading}
                 secureTextEntry
               />
-              {passwordError && (
-                <Text style={[styles.errorText, !validatePassword(password).valid && styles.errorTextActive]}>
-                  {passwordError}
-                </Text>
+              {password && validatePassword(password).valid && (
+                <Text style={styles.successText}>✓ Mật khẩu hợp lệ</Text>
               )}
-              {!passwordError && password && (
-                <Text style={styles.helperTextSuccess}>✓ {passwordError || 'Mật khẩu hợp lệ'}</Text>
+              {password && !validatePassword(password).valid && (
+                <Text style={styles.errorMessageText}>{passwordError}</Text>
               )}
               {!password && (
                 <Text style={styles.helperText}>Phải chứa: chữ hoa, chữ thường, số (min 6 ký tự)</Text>
@@ -289,9 +293,13 @@ const CreateUserScreen: React.FC = ({ navigation }: any) => {
 
             {/* Confirm Password */}
             <View style={styles.field}>
-              <Text style={styles.label}>Xác nhận mật khẩu *</Text>
+              <Text style={styles.label}>✓ Xác nhận mật khẩu *</Text>
               <TextInput
-                style={[styles.input, confirmPasswordError && !validateConfirmPassword(password, confirmPassword).valid && styles.inputError]}
+                style={[
+                  styles.input,
+                  confirmPassword && validateConfirmPassword(password, confirmPassword).valid && styles.inputSuccess,
+                  confirmPassword && !validateConfirmPassword(password, confirmPassword).valid && styles.inputError,
+                ]}
                 placeholder="Nhập lại mật khẩu"
                 placeholderTextColor="#9ca3af"
                 value={confirmPassword}
@@ -299,13 +307,11 @@ const CreateUserScreen: React.FC = ({ navigation }: any) => {
                 editable={!loading}
                 secureTextEntry
               />
-              {confirmPasswordError && !validateConfirmPassword(password, confirmPassword).valid && (
-                <Text style={[styles.errorText, styles.errorTextActive]}>
-                  {confirmPasswordError}
-                </Text>
+              {confirmPassword && validateConfirmPassword(password, confirmPassword).valid && (
+                <Text style={styles.successText}>✓ Mật khẩu trùng khớp</Text>
               )}
-              {confirmPasswordError && validateConfirmPassword(password, confirmPassword).valid && (
-                <Text style={styles.helperTextSuccess}>✓ {confirmPasswordError}</Text>
+              {confirmPassword && !validateConfirmPassword(password, confirmPassword).valid && (
+                <Text style={styles.errorMessageText}>{confirmPasswordError}</Text>
               )}
             </View>
 
@@ -364,30 +370,36 @@ const CreateUserScreen: React.FC = ({ navigation }: any) => {
 
             {/* Name */}
             <View style={styles.field}>
-              <Text style={styles.label}>Tên đầy đủ *</Text>
+              <Text style={styles.label}>👤 Tên đầy đủ *</Text>
               <TextInput
-                style={[styles.input, nameError && styles.inputError]}
+                style={[
+                  styles.input,
+                  name && validateName(name).valid && styles.inputSuccess,
+                  name && !validateName(name).valid && styles.inputError,
+                ]}
                 placeholder="Nhập tên"
                 placeholderTextColor="#9ca3af"
                 value={name}
                 onChangeText={handleNameChange}
                 editable={!loading}
               />
-              {nameError && (
-                <Text style={[styles.errorText, !validateName(name).valid && styles.errorTextActive]}>
-                  {nameError}
-                </Text>
+              {name && validateName(name).valid && (
+                <Text style={styles.successText}>✓ Tên hợp lệ</Text>
               )}
-              {!nameError && name && (
-                <Text style={styles.helperTextSuccess}>✓ {nameError || 'Tên hợp lệ'}</Text>
+              {name && !validateName(name).valid && (
+                <Text style={styles.errorMessageText}>{nameError}</Text>
               )}
             </View>
 
             {/* Email */}
             <View style={styles.field}>
-              <Text style={styles.label}>Email *</Text>
+              <Text style={styles.label}>📧 Email *</Text>
               <TextInput
-                style={[styles.input, emailError && styles.inputError]}
+                style={[
+                  styles.input,
+                  email && validateEmail(email).valid && styles.inputSuccess,
+                  email && !validateEmail(email).valid && styles.inputError,
+                ]}
                 placeholder="example@email.com"
                 placeholderTextColor="#9ca3af"
                 value={email}
@@ -396,13 +408,11 @@ const CreateUserScreen: React.FC = ({ navigation }: any) => {
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
-              {emailError && (
-                <Text style={[styles.errorText, !validateEmail(email).valid && styles.errorTextActive]}>
-                  {emailError}
-                </Text>
+              {email && validateEmail(email).valid && (
+                <Text style={styles.successText}>✓ Email hợp lệ</Text>
               )}
-              {!emailError && email && (
-                <Text style={styles.helperTextSuccess}>✓ {emailError || 'Email hợp lệ'}</Text>
+              {email && !validateEmail(email).valid && (
+                <Text style={styles.errorMessageText}>{emailError}</Text>
               )}
               {!email && (
                 <Text style={styles.helperText}>Định dạng: user@example.com</Text>
@@ -411,9 +421,13 @@ const CreateUserScreen: React.FC = ({ navigation }: any) => {
 
             {/* Phone */}
             <View style={styles.field}>
-              <Text style={styles.label}>Số điện thoại *</Text>
+              <Text style={styles.label}>☎️ Số điện thoại *</Text>
               <TextInput
-                style={[styles.input, phoneError && styles.inputError]}
+                style={[
+                  styles.input,
+                  phone && validatePhone(phone).valid && styles.inputSuccess,
+                  phone && !validatePhone(phone).valid && styles.inputError,
+                ]}
                 placeholder="0xxxxxxxxx"
                 placeholderTextColor="#9ca3af"
                 value={phone}
@@ -421,13 +435,11 @@ const CreateUserScreen: React.FC = ({ navigation }: any) => {
                 editable={!loading}
                 keyboardType="phone-pad"
               />
-              {phoneError && (
-                <Text style={[styles.errorText, !validatePhone(phone).valid && styles.errorTextActive]}>
-                  {phoneError}
-                </Text>
+              {phone && validatePhone(phone).valid && (
+                <Text style={styles.successText}>✓ Số điện thoại hợp lệ</Text>
               )}
-              {!phoneError && phone && (
-                <Text style={styles.helperTextSuccess}>✓ {phoneError || 'Số điện thoại hợp lệ'}</Text>
+              {phone && !validatePhone(phone).valid && (
+                <Text style={styles.errorMessageText}>{phoneError}</Text>
               )}
               {!phone && (
                 <Text style={styles.helperText}>Chỉ chứa chữ số, ít nhất 8 ký tự</Text>
@@ -523,7 +535,7 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: '#fff',
     borderRadius: 10,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#e5e7eb',
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -533,6 +545,10 @@ const styles = StyleSheet.create({
   inputError: {
     borderColor: '#ef4444',
     backgroundColor: '#fef2f2',
+  },
+  inputSuccess: {
+    borderColor: '#16a34a',
+    backgroundColor: '#f0fdf4',
   },
 
   roleBtn: {
@@ -604,6 +620,26 @@ const styles = StyleSheet.create({
   },
   errorTextActive: {
     color: '#dc2626',
+  },
+  errorMessageText: {
+    fontSize: 12,
+    color: '#dc2626',
+    marginTop: 8,
+    fontWeight: '600',
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  successText: {
+    fontSize: 12,
+    color: '#16a34a',
+    marginTop: 8,
+    fontWeight: '600',
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
 
   helperText: {

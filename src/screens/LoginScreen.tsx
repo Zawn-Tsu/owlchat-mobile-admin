@@ -80,7 +80,7 @@ const LoginScreen: React.FC = () => {
 
   // ── Submit ──────────────────────────────────────────────────────────
   const handleLogin = async () => {
-        if (showPassword) {
+    if (showPassword) {
       setOwlState(2); // peek
     } else {
       setOwlState(1); // cover
@@ -90,25 +90,36 @@ const LoginScreen: React.FC = () => {
     try {
       await login(username.trim(), password);
     } catch (error: any) {
-      const msg =
-        error?.response?.data?.message ||
-        error?.message ||
-        '';
+      // Lấy error message từ AuthContext
+      const backendMsg = error?.message || '';
+      
+      console.log('🔴 Backend Error Message:', backendMsg);
 
-      if (msg.toLowerCase().includes('ban') || msg.includes('blocked')) {
-        setErrorMessage('Tài khoản đã bị khóa');
+      // Chuyển hóa error message từ backend thành tiếng Việt
+      if (backendMsg.toLowerCase().includes('account not found')) {
+        setErrorMessage('❌ Tài khoản không tồn tại');
+        setUsernameError('Không tìm thấy tài khoản này');
+        setPasswordError('');
       } 
-      else if (msg.toLowerCase().includes('admin')) {
-        setErrorMessage('Tài khoản không phải admin');
+      else if (backendMsg.toLowerCase().includes('invalid password')) {
+        setErrorMessage('❌ Sai mật khẩu');
+        setUsernameError('');
+        setPasswordError('Mật khẩu không chính xác');
       } 
-      else if (
-        msg.includes('401') ||
-        msg.toLowerCase().includes('unauthorized')
-      ) {
-        setErrorMessage('Sai tài khoản hoặc mật khẩu');
-      } 
+      else if (backendMsg.toLowerCase().includes('ban')) {
+        setErrorMessage('❌ Tài khoản đã bị khóa');
+        setUsernameError('');
+        setPasswordError('');
+      }
+      else if (backendMsg.toLowerCase().includes('admin')) {
+        setErrorMessage('❌ Tài khoản này không phải admin');
+        setUsernameError('');
+        setPasswordError('');
+      }
       else {
-        setErrorMessage('Đăng nhập thất bại');
+        setErrorMessage('❌ Đăng nhập thất bại: ' + backendMsg);
+        setUsernameError('');
+        setPasswordError('');
       }
     } finally {
       setLoading(false);
@@ -303,17 +314,17 @@ logo: {
     gap: 8,
     backgroundColor: '#fef2f2',
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    padding: 10,
+    borderWidth: 2,
+    borderColor: '#dc2626',
+    padding: 12,
     marginBottom: 16,
   },
-  errorBannerIcon: { fontSize: 16 },
+  errorBannerIcon: { fontSize: 18 },
   errorBannerText: {
     flex: 1,
-    fontSize: 13,
-    color: '#dc2626',
-    fontWeight: '500',
+    fontSize: 14,
+    color: '#991b1b',
+    fontWeight: '600',
   },
 
   inputGroup: { marginBottom: 16 },
@@ -329,13 +340,13 @@ logo: {
     alignItems: 'center',
     backgroundColor: '#f9fafb',
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#e5e7eb',
     paddingHorizontal: 12,
   },
   inputWrapError: {
-    borderColor: '#f87171',
-    backgroundColor: '#fff5f5',
+    borderColor: '#dc2626',
+    backgroundColor: '#fee2e2',
   },
   inputIcon: { fontSize: 16, marginRight: 8 },
   input: {
@@ -350,10 +361,15 @@ logo: {
   eyeIcon: { fontSize: 16 },
 
   fieldError: {
-    fontSize: 11,
-    color: '#ef4444',
-    marginTop: 5,
+    fontSize: 12,
+    color: '#dc2626',
+    marginTop: 6,
     marginLeft: 4,
+    fontWeight: '600',
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
   },
 
   loginBtn: {
